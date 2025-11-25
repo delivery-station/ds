@@ -1,16 +1,19 @@
+//go:build integration
 // +build integration
 
 package integration
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/delivery-station/ds/internal/config"
+	"github.com/delivery-station/ds/internal/communication"
 	"github.com/delivery-station/ds/pkg/client"
+	"github.com/delivery-station/ds/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -25,21 +28,21 @@ func TestClientIntegration(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create test configuration
-	cfg := &config.Config{
-		Registry: config.RegistryConfig{
+	cfg := &types.Config{
+		Registry: types.RegistryConfig{
 			Default:            "ghcr.io",
 			InsecureRegistries: []string{},
 		},
-		Cache: config.CacheConfig{
+		Cache: types.CacheConfig{
 			Dir:     filepath.Join(tmpDir, "cache"),
-			MaxSize: "1GB",
-			TTL:     "1h",
+			MaxSize: 1024 * 1024 * 1024, // 1GB in bytes
+			TTL:     time.Hour,
 		},
-		Plugins: config.PluginsConfig{
+		Plugins: types.PluginsConfig{
 			Dir:         filepath.Join(tmpDir, "plugins"),
 			AutoInstall: true,
 		},
-		Auth: config.AuthConfig{
+		Auth: types.AuthConfig{
 			DockerConfig: filepath.Join(os.Getenv("HOME"), ".docker", "config.json"),
 		},
 	}
@@ -56,7 +59,8 @@ func TestClientIntegration(t *testing.T) {
 	defer cancel()
 
 	t.Run("list plugins", func(t *testing.T) {
-		plugins := dsClient.ListPlugins()
+		plugins, err := dsClient.ListPlugins()
+		require.NoError(t, err)
 		// Should have at least discovered any installed plugins
 		assert.NotNil(t, plugins)
 	})
@@ -67,11 +71,16 @@ func TestClientIntegration(t *testing.T) {
 
 		// Test subscribing to events
 		received := make(chan bool, 1)
-		eventBus.Subscribe("test.event", func(data interface{}) {
+		eventBus.Subscribe(communication.EventCustom, func(ctx context.Context, event *communication.Event) error {
 			received <- true
+			return nil
 		})
 
-		eventBus.Publish("test.event", "test data")
+		err := eventBus.Publish(ctx, &communication.Event{
+			Type: communication.EventCustom,
+			Data: map[string]interface{}{"test": "test data"},
+		})
+		require.NoError(t, err)
 
 		select {
 		case <-received:
@@ -82,15 +91,18 @@ func TestClientIntegration(t *testing.T) {
 	})
 
 	t.Run("state management", func(t *testing.T) {
-		state := dsClient.GetState()
-		assert.NotNil(t, state)
+		stateStore := dsClient.StateStore()
+		assert.NotNil(t, stateStore)
 
-		// Set and get state
-		state.Set("test.key", "test.value")
-		
-		value, exists := state.Get("test.key")
-		assert.True(t, exists)
-		assert.Equal(t, "test.value", value)
+		// Set state
+		testValue := map[string]interface{}{"key": "test.value"}
+		err := dsClient.SetState(ctx, "test.key", "test-plugin", testValue, nil)
+		require.NoError(t, err)
+
+		// Get state
+		value, err := dsClient.GetState(ctx, "test.key")
+		require.NoError(t, err)
+		assert.Equal(t, testValue, value)
 	})
 
 	// Note: These tests require actual registry access
@@ -102,7 +114,7 @@ func TestClientIntegration(t *testing.T) {
 		}
 
 		// This would pull an actual artifact
-		_, err := dsClient.Pull(ctx, "ghcr.io/delivery-station/test:latest")
+		err := dsClient.Pull(ctx, "ghcr.io/delivery-station/test:latest", os.Stdout)
 		// We expect this to fail without proper authentication or if artifact doesn't exist
 		// The test is here to verify the integration flow works
 		t.Logf("Pull result: %v", err)
@@ -127,14 +139,16 @@ func TestPluginIntegration(t *testing.T) {
 
 	tmpDir := t.TempDir()
 
-	cfg := &config.Config{
-		Registry: config.RegistryConfig{
+	cfg := &types.Config{
+		Registry: types.RegistryConfig{
 			Default: "ghcr.io",
 		},
-		Cache: config.CacheConfig{
-			Dir: filepath.Join(tmpDir, "cache"),
+		Cache: types.CacheConfig{
+			Dir:     filepath.Join(tmpDir, "cache"),
+			MaxSize: 100 * 1024 * 1024, // 100MB in bytes
+			TTL:     time.Hour,
 		},
-		Plugins: config.PluginsConfig{
+		Plugins: types.PluginsConfig{
 			Dir:         filepath.Join(tmpDir, "plugins"),
 			AutoInstall: false, // Don't auto-install for this test
 		},
@@ -147,23 +161,18 @@ func TestPluginIntegration(t *testing.T) {
 	defer dsClient.Close()
 
 	t.Run("plugin discovery", func(t *testing.T) {
-		plugins := dsClient.ListPlugins()
+		plugins, err := dsClient.ListPlugins()
+		require.NoError(t, err)
 		// Should be empty since we don't have any plugins installed
 		assert.Equal(t, 0, len(plugins))
 	})
 
-	t.Run("register plugin callback", func(t *testing.T) {
-		called := false
-		dsClient.RegisterPlugin("test-plugin", func(args []string) (int, error) {
-			called = true
-			return 0, nil
-		})
-
-		// Verify callback was registered by executing it
-		exitCode, err := dsClient.ExecutePlugin("test-plugin", []string{})
-		assert.NoError(t, err)
-		assert.Equal(t, 0, exitCode)
-		assert.True(t, called)
+	t.Run("plugin execution", func(t *testing.T) {
+		// Note: This would require an actual plugin to be installed
+		// For now, we just test that the API is accessible
+		_, err := dsClient.ExecutePlugin("non-existent-plugin", []string{})
+		// We expect this to fail since plugin doesn't exist
+		assert.Error(t, err)
 	})
 }
 
@@ -175,13 +184,13 @@ func TestCacheIntegration(t *testing.T) {
 
 	tmpDir := t.TempDir()
 
-	cfg := &config.Config{
-		Cache: config.CacheConfig{
+	cfg := &types.Config{
+		Cache: types.CacheConfig{
 			Dir:     filepath.Join(tmpDir, "cache"),
-			MaxSize: "100MB",
-			TTL:     "1h",
+			MaxSize: 100 * 1024 * 1024, // 100MB in bytes
+			TTL:     time.Hour,
 		},
-		Plugins: config.PluginsConfig{
+		Plugins: types.PluginsConfig{
 			Dir: filepath.Join(tmpDir, "plugins"),
 		},
 	}
@@ -196,34 +205,37 @@ func TestCacheIntegration(t *testing.T) {
 	require.NotNil(t, cache)
 
 	t.Run("store and retrieve", func(t *testing.T) {
-		key := "test-key"
+		ctx := context.Background()
+		reference := "test-reference"
 		value := []byte("test-value")
 
-		// Store
-		err := cache.Store(key, value)
+		// Store (Put)
+		entry, err := cache.Put(ctx, reference, bytes.NewReader(value))
 		require.NoError(t, err)
+		assert.NotNil(t, entry)
 
-		// Retrieve
-		retrieved, err := cache.Retrieve(key)
+		// Retrieve (Get)
+		retrievedEntry, err := cache.Get(ctx, reference)
 		require.NoError(t, err)
-		assert.Equal(t, value, retrieved)
-
-		// Check exists
-		exists := cache.Exists(key)
-		assert.True(t, exists)
+		assert.Equal(t, reference, retrievedEntry.Reference)
+		assert.Greater(t, retrievedEntry.Size, int64(0))
 	})
 
 	t.Run("delete", func(t *testing.T) {
-		key := "test-delete"
+		ctx := context.Background()
+		reference := "test-delete"
 		value := []byte("to-be-deleted")
 
-		err := cache.Store(key, value)
+		// Put entry first
+		entry, err := cache.Put(ctx, reference, bytes.NewReader(value))
 		require.NoError(t, err)
 
-		err = cache.Delete(key)
+		// Remove using the key from the entry
+		err = cache.Remove(entry.Key)
 		require.NoError(t, err)
 
-		exists := cache.Exists(key)
-		assert.False(t, exists)
+		// Verify it's gone
+		_, err = cache.Get(ctx, reference)
+		assert.Error(t, err)
 	})
 }
