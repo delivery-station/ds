@@ -178,7 +178,11 @@ func TestCacheList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewCache failed: %v", err)
 	}
-	defer cache.Close()
+	defer func() {
+		if err := cache.Close(); err != nil {
+			t.Errorf("Failed to close cache: %v", err)
+		}
+	}()
 
 	ctx := context.Background()
 

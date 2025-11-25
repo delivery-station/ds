@@ -273,7 +273,11 @@ func savePrivateKeyTo(t *testing.T, path string, key *rsa.PrivateKey) {
 
 	file, err := os.Create(path)
 	require.NoError(t, err)
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			t.Errorf("Failed to close file: %v", err)
+		}
+	}()
 
 	err = pem.Encode(file, pemBlock)
 	require.NoError(t, err)
@@ -296,7 +300,11 @@ func savePublicKeyTo(t *testing.T, path string, key *rsa.PublicKey) {
 
 	file, err := os.Create(path)
 	require.NoError(t, err)
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			t.Errorf("Failed to close file: %v", err)
+		}
+	}()
 
 	err = pem.Encode(file, pemBlock)
 	require.NoError(t, err)

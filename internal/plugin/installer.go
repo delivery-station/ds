@@ -272,7 +272,11 @@ func (i *Installer) downloadBinary(ctx context.Context, ref, destPath, platform 
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			logrus.WithError(err).Warn("Failed to close binary file")
+		}
+	}()
 
 	// Construct platform-specific reference
 	binaryRef := fmt.Sprintf("%s-%s", ref, strings.ReplaceAll(platform, "/", "-"))

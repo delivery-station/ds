@@ -36,7 +36,11 @@ func TestNewClient(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			t.Errorf("Failed to close client: %v", err)
+		}
+	}()
 
 	if client.config == nil {
 		t.Error("Config should not be nil")

@@ -19,7 +19,11 @@ func TestNewStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore failed: %v", err)
 	}
-	defer store.Close()
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Errorf("Failed to close store: %v", err)
+		}
+	}()
 
 	if store.path != storePath {
 		t.Errorf("expected path %s, got %s", storePath, store.path)
@@ -111,7 +115,11 @@ func TestStoreUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore failed: %v", err)
 	}
-	defer store.Close()
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Errorf("Failed to close store: %v", err)
+		}
+	}()
 
 	// Create and put entry
 	now := time.Now()

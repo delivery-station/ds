@@ -47,8 +47,10 @@ func TestLoadDockerConfig(t *testing.T) {
 
 	// Override HOME for test
 	oldHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpDir)
-	defer os.Setenv("HOME", oldHome)
+	_ = os.Setenv("HOME", tmpDir)
+	defer func() {
+		_ = os.Setenv("HOME", oldHome)
+	}()
 
 	provider := NewAuthProvider()
 	err = provider.LoadDockerConfig()
