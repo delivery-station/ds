@@ -1,11 +1,11 @@
-.PHONY: build test lint clean install run help
+.PHONY: build test lint clean install run help release-prepare release-build-all release-checksums
 
 # Build variables
 BINARY_NAME=ds
 VERSION?=dev
 COMMIT?=$(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
 DATE?=$(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
-LDFLAGS=-ldflags "-X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE)"
+LDFLAGS=-ldflags "-s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE)"
 
 # Go commands
 GOCMD=go
@@ -75,5 +75,45 @@ deps: ## Download dependencies
 	$(GOMOD) tidy
 
 all: deps lint test build ## Run all checks and build
+
+release-prepare: ## Prepare for release
+	@echo "Preparing release $(VERSION)"
+	@mkdir -p $(BUILD_DIR)
+
+release-build-all: release-prepare ## Build multi-platform binaries for release
+	@echo "Building release artifacts for $(VERSION)"
+	# Linux AMD64
+	GOOS=linux GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./$(CMD_DIR)
+	COPYFILE_DISABLE=1 tar --exclude='._*' -czf $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64.tar.gz -C $(BUILD_DIR) $(BINARY_NAME)
+	rm $(BUILD_DIR)/$(BINARY_NAME)
+	# Linux ARM64
+	GOOS=linux GOARCH=arm64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./$(CMD_DIR)
+	COPYFILE_DISABLE=1 tar --exclude='._*' -czf $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64.tar.gz -C $(BUILD_DIR) $(BINARY_NAME)
+	rm $(BUILD_DIR)/$(BINARY_NAME)
+	# Linux ARM (32-bit)
+	GOOS=linux GOARCH=arm GOARM=7 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./$(CMD_DIR)
+	COPYFILE_DISABLE=1 tar --exclude='._*' -czf $(BUILD_DIR)/$(BINARY_NAME)-linux-arm.tar.gz -C $(BUILD_DIR) $(BINARY_NAME)
+	rm $(BUILD_DIR)/$(BINARY_NAME)
+	# macOS AMD64 (Intel)
+	GOOS=darwin GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./$(CMD_DIR)
+	COPYFILE_DISABLE=1 tar --exclude='._*' -czf $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64.tar.gz -C $(BUILD_DIR) $(BINARY_NAME)
+	rm $(BUILD_DIR)/$(BINARY_NAME)
+	# macOS ARM64 (Apple Silicon)
+	GOOS=darwin GOARCH=arm64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./$(CMD_DIR)
+	COPYFILE_DISABLE=1 tar --exclude='._*' -czf $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64.tar.gz -C $(BUILD_DIR) $(BINARY_NAME)
+	rm $(BUILD_DIR)/$(BINARY_NAME)
+	# Windows AMD64
+	GOOS=windows GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME).exe ./$(CMD_DIR)
+	cd $(BUILD_DIR) && zip $(BINARY_NAME)-windows-amd64.zip $(BINARY_NAME).exe && cd ..
+	rm $(BUILD_DIR)/$(BINARY_NAME).exe
+	# Windows ARM64
+	GOOS=windows GOARCH=arm64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME).exe ./$(CMD_DIR)
+	cd $(BUILD_DIR) && zip $(BINARY_NAME)-windows-arm64.zip $(BINARY_NAME).exe && cd ..
+	rm $(BUILD_DIR)/$(BINARY_NAME).exe
+
+release-checksums: ## Create checksums for release artifacts
+	@echo "Creating checksums..."
+	cd $(BUILD_DIR) && sha256sum $(BINARY_NAME)-* > checksums.txt && cd ..
+	@echo "Checksums created: $(BUILD_DIR)/checksums.txt"
 
 .DEFAULT_GOAL := help
