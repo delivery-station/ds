@@ -31,7 +31,7 @@ func TestNewClient(t *testing.T) {
 			Default: "ghcr.io",
 		},
 	}
-	
+
 	client, err := NewClient(WithConfig(cfg))
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
@@ -96,7 +96,7 @@ func TestNewClient_WithCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
-	
+
 	cfg := &types.Config{
 		Cache: types.CacheConfig{
 			Dir:     filepath.Join(tmpDir, "cache"),
@@ -136,7 +136,7 @@ func TestNewClient_WithRegistry(t *testing.T) {
 			Default: "ghcr.io",
 		},
 	}
-	
+
 	customRegistry, err := registry.NewClient("ghcr.io", nil)
 	if err != nil {
 		t.Fatalf("Failed to create registry: %v", err)
@@ -156,7 +156,7 @@ func TestNewClient_WithRegistry(t *testing.T) {
 func TestNewClient_WithPluginManager(t *testing.T) {
 	tmpDir := t.TempDir()
 	customPluginMgr := plugin.NewManager(filepath.Join(tmpDir, "plugins"))
-	
+
 	cfg := &types.Config{
 		Cache: types.CacheConfig{
 			Dir:     filepath.Join(tmpDir, "cache"),
@@ -232,7 +232,7 @@ func TestClient_List(t *testing.T) {
 			Default: "ghcr.io",
 		},
 	}
-	
+
 	client, err := NewClient(WithConfig(cfg))
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
@@ -299,7 +299,7 @@ func TestClient_EventBus(t *testing.T) {
 			Default: "ghcr.io",
 		},
 	}
-	
+
 	client, err := NewClient(WithConfig(cfg))
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
@@ -328,7 +328,7 @@ func TestClient_EventBus(t *testing.T) {
 	mu.Lock()
 	wasReceived := received
 	mu.Unlock()
-	
+
 	if !wasReceived {
 		t.Error("Event handler was not called")
 	}
@@ -349,7 +349,7 @@ func TestClient_StateManagement(t *testing.T) {
 			Default: "ghcr.io",
 		},
 	}
-	
+
 	client, err := NewClient(WithConfig(cfg))
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
@@ -363,7 +363,7 @@ func TestClient_StateManagement(t *testing.T) {
 		"key1": "value1",
 		"key2": float64(42), // JSON numbers are float64
 	}
-	
+
 	if err := client.SetState(ctx, "test.key", "test-plugin", testState, nil); err != nil {
 		t.Fatalf("Failed to set state: %v", err)
 	}
@@ -393,7 +393,7 @@ func TestClient_PluginRegistration(t *testing.T) {
 			Default: "ghcr.io",
 		},
 	}
-	
+
 	client, err := NewClient(WithConfig(cfg))
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
@@ -429,7 +429,7 @@ func TestClient_Accessors(t *testing.T) {
 			Default: "ghcr.io",
 		},
 	}
-	
+
 	client, err := NewClient(WithConfig(cfg))
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
@@ -474,7 +474,7 @@ func TestClient_Close(t *testing.T) {
 			Default: "ghcr.io",
 		},
 	}
-	
+
 	client, err := NewClient(WithConfig(cfg))
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)

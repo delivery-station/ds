@@ -16,12 +16,12 @@ import (
 
 // Cache provides artifact caching functionality
 type Cache struct {
-	dir      string
-	store    *Store
-	maxSize  int64 // Maximum cache size in bytes
-	ttl      time.Duration
-	mu       sync.RWMutex
-	logger   *logrus.Logger
+	dir     string
+	store   *Store
+	maxSize int64 // Maximum cache size in bytes
+	ttl     time.Duration
+	mu      sync.RWMutex
+	logger  *logrus.Logger
 }
 
 // CacheEntry represents a cached artifact
@@ -247,9 +247,9 @@ func (c *Cache) Clean() (int, error) {
 		// Check if expired
 		if c.ttl > 0 && now.Sub(entry.CreatedAt) > c.ttl {
 			c.logger.WithFields(logrus.Fields{
-				"key":     entry.Key,
-				"age":     now.Sub(entry.CreatedAt),
-				"ttl":     c.ttl,
+				"key": entry.Key,
+				"age": now.Sub(entry.CreatedAt),
+				"ttl": c.ttl,
 			}).Debug("Removing expired entry")
 
 			// Remove content directory
@@ -318,10 +318,10 @@ func (c *Cache) evictLRUNoLock(targetBytes int64) error {
 		}
 
 		c.logger.WithFields(logrus.Fields{
-			"key":          entry.Key,
-			"reference":    entry.Reference,
-			"size":         entry.Size,
-			"last_access":  entry.AccessedAt,
+			"key":         entry.Key,
+			"reference":   entry.Reference,
+			"size":        entry.Size,
+			"last_access": entry.AccessedAt,
 		}).Debug("Evicting cache entry")
 
 		// Remove content directory

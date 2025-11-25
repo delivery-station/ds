@@ -20,14 +20,14 @@ var (
 
 // StateEntry represents a shared state entry
 type StateEntry struct {
-	Key        string                 `json:"key"`
-	Value      map[string]interface{} `json:"value"`
-	PluginID   string                 `json:"plugin_id"`
-	CreatedAt  time.Time              `json:"created_at"`
-	UpdatedAt  time.Time              `json:"updated_at"`
-	ExpiresAt  *time.Time             `json:"expires_at,omitempty"`
-	AccessedAt time.Time              `json:"accessed_at"`
-	AccessCount int                   `json:"access_count"`
+	Key         string                 `json:"key"`
+	Value       map[string]interface{} `json:"value"`
+	PluginID    string                 `json:"plugin_id"`
+	CreatedAt   time.Time              `json:"created_at"`
+	UpdatedAt   time.Time              `json:"updated_at"`
+	ExpiresAt   *time.Time             `json:"expires_at,omitempty"`
+	AccessedAt  time.Time              `json:"accessed_at"`
+	AccessCount int                    `json:"access_count"`
 }
 
 // StateStore manages shared state between plugins

@@ -32,13 +32,13 @@ type EventHandler func(ctx context.Context, event *Event) error
 
 // EventBus manages event publishing and subscription
 type EventBus struct {
-	mu         sync.RWMutex
+	mu          sync.RWMutex
 	subscribers map[EventType][]EventHandler
-	logger     *logrus.Logger
-	bufferSize int
-	eventChan  chan *Event
-	done       chan struct{}
-	wg         sync.WaitGroup
+	logger      *logrus.Logger
+	bufferSize  int
+	eventChan   chan *Event
+	done        chan struct{}
+	wg          sync.WaitGroup
 }
 
 // NewEventBus creates a new event bus

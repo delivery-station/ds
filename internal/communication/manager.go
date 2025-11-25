@@ -18,9 +18,9 @@ type Manager struct {
 
 // ManagerConfig holds configuration for the communication manager
 type ManagerConfig struct {
-	StateDir       string
+	StateDir        string
 	EventBufferSize int
-	Logger         *logrus.Logger
+	Logger          *logrus.Logger
 }
 
 // NewManager creates a new communication manager

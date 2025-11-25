@@ -13,12 +13,12 @@ import (
 
 // PluginInfo represents information about a registered plugin
 type PluginInfo struct {
-	ID          string                 `json:"id"`
-	Name        string                 `json:"name"`
-	Version     string                 `json:"version"`
-	Capabilities []string              `json:"capabilities"`
-	Metadata    map[string]interface{} `json:"metadata"`
-	Status      PluginStatus           `json:"status"`
+	ID           string                 `json:"id"`
+	Name         string                 `json:"name"`
+	Version      string                 `json:"version"`
+	Capabilities []string               `json:"capabilities"`
+	Metadata     map[string]interface{} `json:"metadata"`
+	Status       PluginStatus           `json:"status"`
 }
 
 // PluginStatus represents the status of a plugin

@@ -146,8 +146,8 @@ func (s *Store) load() error {
 	}
 
 	s.logger.WithFields(logrus.Fields{
-		"path":   s.path,
-		"count":  len(s.entries),
+		"path":  s.path,
+		"count": len(s.entries),
 	}).Debug("Loaded cache store")
 
 	return nil

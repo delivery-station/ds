@@ -42,7 +42,7 @@ func (l *Loader) Load() (*types.Config, error) {
 
 	// Parse cache settings BEFORE unmarshal to handle string formats
 	var config types.Config
-	
+
 	// Pre-parse cache.max_size and cache.ttl before unmarshal
 	if maxSizeStr := l.viper.GetString("cache.max_size"); maxSizeStr != "" {
 		size, err := parseSize(maxSizeStr)
@@ -52,7 +52,7 @@ func (l *Loader) Load() (*types.Config, error) {
 		// Set as int64 in viper for unmarshal
 		l.viper.Set("cache.max_size", size)
 	}
-	
+
 	if ttlStr := l.viper.GetString("cache.ttl"); ttlStr != "" {
 		duration, err := parseDuration(ttlStr)
 		if err != nil {
@@ -246,7 +246,7 @@ func (l *Loader) Validate(config *types.Config) error {
 	if config.Plugins.Signature.Mode != "" {
 		validModes := map[string]bool{"strict": true, "permissive": true, "disabled": true}
 		if !validModes[config.Plugins.Signature.Mode] {
-			return fmt.Errorf("invalid plugins.signature.mode: %s (must be strict, permissive, or disabled)", 
+			return fmt.Errorf("invalid plugins.signature.mode: %s (must be strict, permissive, or disabled)",
 				config.Plugins.Signature.Mode)
 		}
 	}
@@ -257,7 +257,7 @@ func (l *Loader) Validate(config *types.Config) error {
 // parseSize parses a size string (e.g., "10GB", "500MB") into bytes
 func parseSize(s string) (int64, error) {
 	s = strings.TrimSpace(strings.ToUpper(s))
-	
+
 	// Extract number and unit
 	var value float64
 	var unit string
@@ -289,7 +289,7 @@ func parseSize(s string) (int64, error) {
 // parseDuration parses a duration string (e.g., "7d", "24h", "30m") into time.Duration
 func parseDuration(s string) (time.Duration, error) {
 	s = strings.TrimSpace(strings.ToLower(s))
-	
+
 	// Handle day units (not supported by time.ParseDuration)
 	if strings.HasSuffix(s, "d") {
 		daysStr := strings.TrimSuffix(s, "d")
@@ -299,7 +299,7 @@ func parseDuration(s string) (time.Duration, error) {
 		}
 		return time.Duration(daysFloat * 24 * float64(time.Hour)), nil
 	}
-	
+
 	// Use standard time.ParseDuration for other units
 	return time.ParseDuration(s)
 }

@@ -29,9 +29,12 @@ func TestEventBusSubscribe(t *testing.T) {
 	bus := NewEventBus(logger, 10)
 	defer bus.Close()
 
+	var mu sync.Mutex
 	called := false
 	handler := func(ctx context.Context, event *Event) error {
+		mu.Lock()
 		called = true
+		mu.Unlock()
 		return nil
 	}
 
@@ -49,7 +52,9 @@ func TestEventBusSubscribe(t *testing.T) {
 	// Wait for event processing
 	time.Sleep(100 * time.Millisecond)
 
+	mu.Lock()
 	assert.True(t, called)
+	mu.Unlock()
 }
 
 func TestEventBusMultipleSubscribers(t *testing.T) {

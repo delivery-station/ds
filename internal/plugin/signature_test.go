@@ -81,7 +81,7 @@ func TestSignatureVerifier_Strict_Unsigned(t *testing.T) {
 
 func TestSignatureVerifier_ValidSignature(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	// Generate key pair
 	privKey, pubKey := generateTestKeyPair(t)
 	privKeyPath := savePrivateKey(t, tmpDir, privKey)
@@ -115,11 +115,11 @@ func TestSignatureVerifier_ValidSignature(t *testing.T) {
 
 func TestSignatureVerifier_InvalidSignature(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	// Generate two different key pairs
 	privKey1, _ := generateTestKeyPair(t)
 	_, pubKey2 := generateTestKeyPair(t)
-	
+
 	privKeyPath := savePrivateKey(t, tmpDir, privKey1)
 	pubKeyPath := savePublicKey(t, tmpDir, pubKey2)
 
@@ -147,7 +147,7 @@ func TestSignatureVerifier_InvalidSignature(t *testing.T) {
 
 func TestSignatureVerifier_ModifiedBinary(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	// Generate key pair
 	privKey, pubKey := generateTestKeyPair(t)
 	privKeyPath := savePrivateKey(t, tmpDir, privKey)
@@ -188,7 +188,7 @@ func TestSignatureVerifier_TrustStore(t *testing.T) {
 	// Generate key pair and save public key to trust store
 	privKey, pubKey := generateTestKeyPair(t)
 	privKeyPath := savePrivateKey(t, tmpDir, privKey)
-	
+
 	pubKeyPath := filepath.Join(trustStore, "test-key.pem")
 	savePublicKeyTo(t, pubKeyPath, pubKey)
 
@@ -217,11 +217,11 @@ func TestSignatureVerifier_TrustStore(t *testing.T) {
 
 func TestSignatureVerifier_MultipleKeys(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	// Generate two key pairs
 	privKey1, pubKey1 := generateTestKeyPair(t)
 	_, pubKey2 := generateTestKeyPair(t)
-	
+
 	privKeyPath := savePrivateKey(t, tmpDir, privKey1)
 	pubKeyPath1 := filepath.Join(tmpDir, "key1.pem")
 	pubKeyPath2 := filepath.Join(tmpDir, "key2.pem")
@@ -270,11 +270,11 @@ func savePrivateKeyTo(t *testing.T, path string, key *rsa.PrivateKey) {
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(key),
 	}
-	
+
 	file, err := os.Create(path)
 	require.NoError(t, err)
 	defer file.Close()
-	
+
 	err = pem.Encode(file, pemBlock)
 	require.NoError(t, err)
 }
@@ -288,16 +288,16 @@ func savePublicKey(t *testing.T, dir string, key *rsa.PublicKey) string {
 func savePublicKeyTo(t *testing.T, path string, key *rsa.PublicKey) {
 	pubKeyBytes, err := x509.MarshalPKIXPublicKey(key)
 	require.NoError(t, err)
-	
+
 	pemBlock := &pem.Block{
 		Type:  "PUBLIC KEY",
 		Bytes: pubKeyBytes,
 	}
-	
+
 	file, err := os.Create(path)
 	require.NoError(t, err)
 	defer file.Close()
-	
+
 	err = pem.Encode(file, pemBlock)
 	require.NoError(t, err)
 }

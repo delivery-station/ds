@@ -36,13 +36,13 @@ func NewClient(opts ...Option) (*Client, error) {
 	c := &Client{
 		logger: logrus.New(),
 	}
-	
+
 	for _, opt := range opts {
 		if err := opt(c); err != nil {
 			return nil, fmt.Errorf("failed to apply option: %w", err)
 		}
 	}
-	
+
 	// Apply defaults if not set
 	if c.config == nil {
 		loader := config.NewLoader()
@@ -52,7 +52,7 @@ func NewClient(opts ...Option) (*Client, error) {
 		}
 		c.config = cfg
 	}
-	
+
 	if c.cache == nil {
 		cacheInstance, err := cache.NewCache(
 			c.config.Cache.Dir,
@@ -65,7 +65,7 @@ func NewClient(opts ...Option) (*Client, error) {
 		}
 		c.cache = cacheInstance
 	}
-	
+
 	if c.registry == nil {
 		regClient, err := registry.NewClient(c.config.Registry.Default, nil)
 		if err != nil {
@@ -73,11 +73,11 @@ func NewClient(opts ...Option) (*Client, error) {
 		}
 		c.registry = regClient
 	}
-	
+
 	if c.eventBus == nil {
 		c.eventBus = communication.NewEventBus(c.logger, 100)
 	}
-	
+
 	if c.stateStore == nil {
 		stateDir := filepath.Join(c.config.Cache.Dir, "state")
 		store, err := communication.NewStateStore(stateDir, c.logger)
@@ -86,7 +86,7 @@ func NewClient(opts ...Option) (*Client, error) {
 		}
 		c.stateStore = store
 	}
-	
+
 	if c.pluginRegistry == nil {
 		regDir := filepath.Join(c.config.Cache.Dir, "registry")
 		reg, err := communication.NewPluginRegistry(regDir, c.logger)
@@ -95,11 +95,11 @@ func NewClient(opts ...Option) (*Client, error) {
 		}
 		c.pluginRegistry = reg
 	}
-	
+
 	if c.pluginMgr == nil {
 		c.pluginMgr = plugin.NewManager(c.config.Plugins.Dir)
 	}
-	
+
 	return c, nil
 }
 
@@ -207,7 +207,7 @@ func (c *Client) RegisterPlugin(ctx context.Context, name, version, path string)
 	return fmt.Errorf("not yet implemented")
 }
 
-// DiscoverPlugin discovers a plugin by name  
+// DiscoverPlugin discovers a plugin by name
 // Note: This returns communication.PluginInfo internally
 func (c *Client) DiscoverPlugin(ctx context.Context, name string) error {
 	// Convert from internal type - simplified for now
