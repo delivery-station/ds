@@ -94,7 +94,11 @@ func TestCachePutAndGet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewCache failed: %v", err)
 	}
-	defer cache.Close()
+	defer func() {
+		if err := cache.Close(); err != nil {
+			t.Errorf("Failed to close cache: %v", err)
+		}
+	}()
 
 	ctx := context.Background()
 	reference := "ghcr.io/test/artifact:v1.0.0"
@@ -232,7 +236,11 @@ func TestCacheRemove(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewCache failed: %v", err)
 	}
-	defer cache.Close()
+	defer func() {
+		if err := cache.Close(); err != nil {
+			t.Errorf("Failed to close cache: %v", err)
+		}
+	}()
 
 	ctx := context.Background()
 	reference := "ghcr.io/test/artifact:v1.0.0"
@@ -276,7 +284,11 @@ func TestCacheClean(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewCache failed: %v", err)
 	}
-	defer cache.Close()
+	defer func() {
+		if err := cache.Close(); err != nil {
+			t.Errorf("Failed to close cache: %v", err)
+		}
+	}()
 
 	ctx := context.Background()
 
@@ -315,7 +327,11 @@ func TestCacheSize(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewCache failed: %v", err)
 	}
-	defer cache.Close()
+	defer func() {
+		if err := cache.Close(); err != nil {
+			t.Errorf("Failed to close cache: %v", err)
+		}
+	}()
 
 	ctx := context.Background()
 
@@ -361,7 +377,11 @@ func TestCacheLRUEviction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewCache failed: %v", err)
 	}
-	defer cache.Close()
+	defer func() {
+		if err := cache.Close(); err != nil {
+			t.Errorf("Failed to close cache: %v", err)
+		}
+	}()
 
 	ctx := context.Background()
 
@@ -416,7 +436,11 @@ func TestCacheTTLExpiration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewCache failed: %v", err)
 	}
-	defer cache.Close()
+	defer func() {
+		if err := cache.Close(); err != nil {
+			t.Errorf("Failed to close cache: %v", err)
+		}
+	}()
 
 	ctx := context.Background()
 	reference := "ghcr.io/test/artifact:v1.0.0"
@@ -450,7 +474,11 @@ func TestCacheAccessCountIncrement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewCache failed: %v", err)
 	}
-	defer cache.Close()
+	defer func() {
+		if err := cache.Close(); err != nil {
+			t.Errorf("Failed to close cache: %v", err)
+		}
+	}()
 
 	ctx := context.Background()
 	reference := "ghcr.io/test/artifact:v1.0.0"

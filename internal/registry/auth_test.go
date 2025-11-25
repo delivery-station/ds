@@ -72,8 +72,10 @@ func TestLoadDockerConfig_NotFound(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	oldHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpDir)
-	defer os.Setenv("HOME", oldHome)
+	_ = os.Setenv("HOME", tmpDir)
+	defer func() {
+		_ = os.Setenv("HOME", oldHome)
+	}()
 
 	provider := NewAuthProvider()
 	err := provider.LoadDockerConfig()

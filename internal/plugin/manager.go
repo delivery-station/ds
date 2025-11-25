@@ -83,6 +83,11 @@ func (m *Manager) DiscoverPlugins() error {
 			continue
 		}
 
+		// Skip manifest files
+		if strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml") {
+			continue
+		}
+
 		// Remove ds- prefix and any extension
 		pluginName := strings.TrimPrefix(name, "ds-")
 		// Remove common extensions

@@ -12,8 +12,7 @@
         [
             "@semantic-release/exec",
             {   
-                "prepareCmd": "VERSION=${nextRelease.version} make release-prepare",
-                "publishCmd": "VERSION=${nextRelease.version} make release-build-all release-checksums"
+                "prepareCmd": "VERSION=${nextRelease.version} make release-prepare release-build-all release-checksums"
             }
         ],
         [
