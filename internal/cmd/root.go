@@ -109,7 +109,8 @@ func Execute() error {
 func executePlugin(pluginName string, args []string) (int, error) {
 	// Initialize config manually (since PersistentPreRunE won't run for unknown commands)
 	if err := initConfig(); err != nil {
-		// Continue anyway with defaults
+		// Continue anyway with defaults - config errors are non-fatal for plugin execution
+		logrus.WithError(err).Debug("Failed to initialize config, using defaults")
 	}
 
 	// Manually check for --plugin-dir flag in os.Args
@@ -174,10 +175,10 @@ func init() {
 	})
 
 	// Bind flags to viper
-	viper.BindPFlag("config", rootCmd.PersistentFlags().Lookup("config"))
-	viper.BindPFlag("logging.level", rootCmd.PersistentFlags().Lookup("log-level"))
-	viper.BindPFlag("plugins.dir", rootCmd.PersistentFlags().Lookup("plugin-dir"))
-	viper.BindPFlag("no_color", rootCmd.PersistentFlags().Lookup("no-color"))
+	_ = viper.BindPFlag("config", rootCmd.PersistentFlags().Lookup("config"))
+	_ = viper.BindPFlag("logging.level", rootCmd.PersistentFlags().Lookup("log-level"))
+	_ = viper.BindPFlag("plugins.dir", rootCmd.PersistentFlags().Lookup("plugin-dir"))
+	_ = viper.BindPFlag("no_color", rootCmd.PersistentFlags().Lookup("no-color"))
 }
 
 // initConfig reads in config file and ENV variables if set.

@@ -8,6 +8,7 @@ import (
 	"github.com/delivery-station/ds/internal/config"
 	"github.com/delivery-station/ds/internal/plugin"
 	"github.com/delivery-station/ds/pkg/types"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
@@ -142,10 +143,14 @@ var pluginInfoCmd = &cobra.Command{
 
 func displayPluginsTable(plugins []*types.PluginInfo) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
-	defer w.Flush()
+	defer func() {
+		if err := w.Flush(); err != nil {
+			logrus.WithError(err).Warn("Failed to flush output")
+		}
+	}()
 
-	fmt.Fprintln(w, "NAME\tVERSION\tDESCRIPTION")
-	fmt.Fprintln(w, "----\t-------\t-----------")
+	_, _ = fmt.Fprintln(w, "NAME\tVERSION\tDESCRIPTION")
+	_, _ = fmt.Fprintln(w, "----\t-------\t-----------")
 
 	for _, p := range plugins {
 		description := p.Description
@@ -156,7 +161,7 @@ func displayPluginsTable(plugins []*types.PluginInfo) {
 		if len(description) > 50 {
 			description = description[:47] + "..."
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\n", p.Name, p.Version, description)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", p.Name, p.Version, description)
 	}
 }
 

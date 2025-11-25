@@ -166,8 +166,8 @@ func TestRemovePlugin(t *testing.T) {
 	manifestPath := filepath.Join(tmpDir, pluginName+".yaml")
 
 	// Create files
-	os.WriteFile(binaryPath, []byte("binary"), 0755)
-	os.WriteFile(manifestPath, []byte("manifest"), 0644)
+	_ = os.WriteFile(binaryPath, []byte("binary"), 0755)
+	_ = os.WriteFile(manifestPath, []byte("manifest"), 0644)
 
 	// Create installer
 	authProvider := registry.NewAuthProvider()

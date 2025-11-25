@@ -89,7 +89,7 @@ func (c *Cache) Get(ctx context.Context, reference string) (*CacheEntry, error) 
 		c.logger.WithField("key", key).Debug("Cache entry expired")
 		// Remove expired entry (unlock first to avoid deadlock)
 		c.mu.RUnlock()
-		c.Remove(key)
+		_ = c.Remove(key) // Ignore error as entry is already considered expired
 		c.mu.RLock()
 		return nil, fmt.Errorf("cache entry expired")
 	}
@@ -139,12 +139,16 @@ func (c *Cache) Put(ctx context.Context, reference string, reader io.Reader) (*C
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cache content file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			c.logger.WithError(err).Warn("Failed to close cache content file")
+		}
+	}()
 
 	// Copy content and track size
 	size, err := io.Copy(file, reader)
 	if err != nil {
-		os.RemoveAll(entryDir)
+		_ = os.RemoveAll(entryDir) // Best effort cleanup
 		return nil, fmt.Errorf("failed to write cache content: %w", err)
 	}
 
@@ -179,7 +183,7 @@ func (c *Cache) Put(ctx context.Context, reference string, reader io.Reader) (*C
 
 	// Store entry metadata
 	if err := c.store.Put(entry); err != nil {
-		os.RemoveAll(entryDir)
+		_ = os.RemoveAll(entryDir) // Best effort cleanup
 		return nil, fmt.Errorf("failed to store cache entry metadata: %w", err)
 	}
 

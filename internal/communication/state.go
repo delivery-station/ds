@@ -116,7 +116,7 @@ func (s *StateStore) Get(ctx context.Context, key string) (*StateEntry, error) {
 	// Check expiration
 	if entry.ExpiresAt != nil && time.Now().After(*entry.ExpiresAt) {
 		delete(s.states, key)
-		s.save()
+		_ = s.save() // Best effort save
 		return nil, ErrStateExpired
 	}
 

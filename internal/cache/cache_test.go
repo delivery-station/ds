@@ -21,7 +21,11 @@ func TestNewCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewCache failed: %v", err)
 	}
-	defer cache.Close()
+	defer func() {
+		if err := cache.Close(); err != nil {
+			t.Errorf("Failed to close cache: %v", err)
+		}
+	}()
 
 	if cache.dir != tmpDir {
 		t.Errorf("expected dir %s, got %s", tmpDir, cache.dir)
@@ -149,7 +153,11 @@ func TestCacheGetNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewCache failed: %v", err)
 	}
-	defer cache.Close()
+	defer func() {
+		if err := cache.Close(); err != nil {
+			t.Errorf("Failed to close cache: %v", err)
+		}
+	}()
 
 	ctx := context.Background()
 	reference := "ghcr.io/test/nonexistent:v1.0.0"

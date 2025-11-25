@@ -85,8 +85,10 @@ func TestExpandString(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Set environment variables
 			for k, v := range tt.envVars {
-				os.Setenv(k, v)
-				defer os.Unsetenv(k)
+				_ = os.Setenv(k, v)
+				defer func(key string) {
+					_ = os.Unsetenv(key)
+				}(k)
 			}
 
 			result := loader.expandString(tt.input)
@@ -242,10 +244,12 @@ func TestExpandVariables(t *testing.T) {
 	loader := NewLoader()
 
 	// Set test environment variables
-	os.Setenv("TEST_USER", "testuser")
-	os.Setenv("TEST_TOKEN", "secret123")
-	defer os.Unsetenv("TEST_USER")
-	defer os.Unsetenv("TEST_TOKEN")
+	_ = os.Setenv("TEST_USER", "testuser")
+	_ = os.Setenv("TEST_TOKEN", "secret123")
+	defer func() {
+		_ = os.Unsetenv("TEST_USER")
+		_ = os.Unsetenv("TEST_TOKEN")
+	}()
 
 	config := &types.Config{
 		Auth: types.AuthConfig{

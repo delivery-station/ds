@@ -94,7 +94,7 @@ func (c *Client) Pull(ctx context.Context, reference string, dest io.Writer) err
 	tag := "latest"
 	if idx := lastIndex(reference, ":"); idx != -1 {
 		tag = reference[idx+1:]
-		reference = reference[:idx]
+		// Note: reference base is not needed after tag extraction
 	}
 
 	// Pull manifest
@@ -110,7 +110,11 @@ func (c *Client) Pull(ctx context.Context, reference string, dest io.Writer) err
 	if err != nil {
 		return fmt.Errorf("failed to fetch manifest: %w", err)
 	}
-	defer manifestReader.Close()
+	defer func() {
+		if err := manifestReader.Close(); err != nil {
+			logrus.WithError(err).Warn("Failed to close manifest reader")
+		}
+	}()
 
 	// Copy to destination
 	_, err = io.Copy(dest, manifestReader)
@@ -136,7 +140,7 @@ func (c *Client) Push(ctx context.Context, reference string, content io.Reader, 
 	tag := "latest"
 	if idx := lastIndex(reference, ":"); idx != -1 {
 		tag = reference[idx+1:]
-		reference = reference[:idx]
+		// Note: reference base is not needed after tag extraction
 	}
 
 	// Read content into bytes
@@ -200,7 +204,7 @@ func (c *Client) GetManifest(ctx context.Context, reference string) ([]byte, err
 	tag := "latest"
 	if idx := lastIndex(reference, ":"); idx != -1 {
 		tag = reference[idx+1:]
-		reference = reference[:idx]
+		// Note: reference base is not needed after tag extraction
 	}
 
 	// Resolve manifest descriptor
@@ -214,7 +218,11 @@ func (c *Client) GetManifest(ctx context.Context, reference string) ([]byte, err
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch manifest: %w", err)
 	}
-	defer manifestReader.Close()
+	defer func() {
+		if err := manifestReader.Close(); err != nil {
+			logrus.WithError(err).Warn("Failed to close manifest reader")
+		}
+	}()
 
 	// Read manifest
 	manifest, err := io.ReadAll(manifestReader)

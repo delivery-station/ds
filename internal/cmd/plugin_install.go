@@ -62,8 +62,7 @@ Examples:
 }
 
 var (
-	installForce bool
-	removeForce  bool
+	removeForce bool
 )
 
 func init() {
@@ -188,7 +187,7 @@ func runPluginRemove(cmd *cobra.Command, args []string) error {
 	if !removeForce {
 		fmt.Printf("Remove plugin '%s'? [y/N] ", name)
 		var response string
-		fmt.Scanln(&response)
+		_, _ = fmt.Scanln(&response)
 		response = strings.ToLower(strings.TrimSpace(response))
 
 		if response != "y" && response != "yes" {

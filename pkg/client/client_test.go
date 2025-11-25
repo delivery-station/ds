@@ -77,7 +77,11 @@ func TestNewClient_WithConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			t.Errorf("Failed to close client: %v", err)
+		}
+	}()
 
 	if client.config != cfg {
 		t.Error("Config should match provided config")
@@ -115,7 +119,11 @@ func TestNewClient_WithCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			t.Errorf("Failed to close client: %v", err)
+		}
+	}()
 
 	if client.cache != customCache {
 		t.Error("Cache should match provided cache")
@@ -146,7 +154,11 @@ func TestNewClient_WithRegistry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			t.Errorf("Failed to close client: %v", err)
+		}
+	}()
 
 	if client.registry != customRegistry {
 		t.Error("Registry should match provided registry")
@@ -175,7 +187,11 @@ func TestNewClient_WithPluginManager(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			t.Errorf("Failed to close client: %v", err)
+		}
+	}()
 
 	if client.pluginMgr != customPluginMgr {
 		t.Error("PluginManager should match provided plugin manager")
@@ -202,7 +218,11 @@ func TestClient_PullAndPush(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			t.Errorf("Failed to close client: %v", err)
+		}
+	}()
 
 	ctx := context.Background()
 
@@ -237,7 +257,11 @@ func TestClient_List(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			t.Errorf("Failed to close client: %v", err)
+		}
+	}()
 
 	ctx := context.Background()
 
@@ -272,7 +296,11 @@ func TestClient_ListPlugins(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			t.Errorf("Failed to close client: %v", err)
+		}
+	}()
 
 	plugins, err := client.ListPlugins()
 	if err != nil {
@@ -304,7 +332,11 @@ func TestClient_EventBus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			t.Errorf("Failed to close client: %v", err)
+		}
+	}()
 
 	var mu sync.Mutex
 	received := false
@@ -354,7 +386,11 @@ func TestClient_StateManagement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			t.Errorf("Failed to close client: %v", err)
+		}
+	}()
 
 	ctx := context.Background()
 
@@ -398,7 +434,11 @@ func TestClient_PluginRegistration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			t.Errorf("Failed to close client: %v", err)
+		}
+	}()
 
 	ctx := context.Background()
 
@@ -434,7 +474,11 @@ func TestClient_Accessors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			t.Errorf("Failed to close client: %v", err)
+		}
+	}()
 
 	if client.Config() == nil {
 		t.Error("Config() should not return nil")

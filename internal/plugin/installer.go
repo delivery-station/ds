@@ -59,7 +59,9 @@ func (i *Installer) InstallPlugin(ctx context.Context, name, version string) err
 	if err != nil {
 		return fmt.Errorf("failed to create temp directory: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		_ = os.RemoveAll(tmpDir) // Best effort cleanup
+	}()
 
 	// Download plugin manifest
 	manifestPath := filepath.Join(tmpDir, "plugin.yaml")
@@ -128,8 +130,8 @@ func (i *Installer) InstallPlugin(ctx context.Context, name, version string) err
 	if i.verifier != nil {
 		if err := i.verifier.VerifyPlugin(destBinary); err != nil {
 			// Clean up on verification failure
-			os.Remove(destBinary)
-			os.Remove(destBinary + ".sig")
+			_ = os.Remove(destBinary)          // Best effort cleanup
+			_ = os.Remove(destBinary + ".sig") // Best effort cleanup
 			return fmt.Errorf("signature verification failed: %w", err)
 		}
 	}
@@ -240,14 +242,18 @@ func (i *Installer) downloadManifest(ctx context.Context, ref, destPath string) 
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			logrus.WithError(err).Warn("Failed to close manifest file")
+		}
+	}()
 
 	// Download manifest artifact
 	manifestRef := fmt.Sprintf("%s-manifest", ref)
 	if err := i.client.Pull(ctx, manifestRef, file); err != nil {
 		// If manifest artifact doesn't exist, try fetching from main artifact
-		file.Seek(0, 0)
-		file.Truncate(0)
+		_, _ = file.Seek(0, 0) // Reset file position
+		_ = file.Truncate(0)   // Truncate file
 
 		if err := i.client.Pull(ctx, ref, file); err != nil {
 			return err
@@ -288,7 +294,11 @@ func (i *Installer) downloadSignature(ctx context.Context, ref, destPath, platfo
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			logrus.WithError(err).Warn("Failed to close signature file")
+		}
+	}()
 
 	// Construct signature reference (same as binary but with .sig suffix)
 	sigRef := fmt.Sprintf("%s-%s.sig", ref, strings.ReplaceAll(platform, "/", "-"))
@@ -307,7 +317,11 @@ func verifyChecksum(path, expectedChecksum string) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			logrus.WithError(err).Warn("Failed to close file for checksum verification")
+		}
+	}()
 
 	hash := sha256.New()
 	if _, err := io.Copy(hash, file); err != nil {
@@ -328,13 +342,21 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer sourceFile.Close()
+	defer func() {
+		if err := sourceFile.Close(); err != nil {
+			logrus.WithError(err).Warn("Failed to close source file")
+		}
+	}()
 
 	destFile, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
-	defer destFile.Close()
+	defer func() {
+		if err := destFile.Close(); err != nil {
+			logrus.WithError(err).Warn("Failed to close destination file")
+		}
+	}()
 
 	if _, err := io.Copy(destFile, sourceFile); err != nil {
 		return err

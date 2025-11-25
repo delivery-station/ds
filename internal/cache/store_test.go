@@ -36,7 +36,11 @@ func TestStorePutAndGet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore failed: %v", err)
 	}
-	defer store.Close()
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Errorf("Failed to close store: %v", err)
+		}
+	}()
 
 	// Create test entry
 	now := time.Now()
@@ -84,7 +88,11 @@ func TestStoreGetNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore failed: %v", err)
 	}
-	defer store.Close()
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Errorf("Failed to close store: %v", err)
+		}
+	}()
 
 	// Try to get non-existent entry
 	_, err = store.Get("nonexistent-key")
@@ -150,7 +158,11 @@ func TestStoreDelete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore failed: %v", err)
 	}
-	defer store.Close()
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Errorf("Failed to close store: %v", err)
+		}
+	}()
 
 	// Create and put entry
 	now := time.Now()
@@ -194,7 +206,11 @@ func TestStoreList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore failed: %v", err)
 	}
-	defer store.Close()
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Errorf("Failed to close store: %v", err)
+		}
+	}()
 
 	// Put multiple entries
 	now := time.Now()
@@ -294,7 +310,11 @@ func TestStorePersistence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore failed on reload: %v", err)
 	}
-	defer store2.Close()
+	defer func() {
+		if err := store2.Close(); err != nil {
+			t.Errorf("Failed to close store: %v", err)
+		}
+	}()
 
 	// Verify entry was persisted
 	retrieved, err := store2.Get("test-key")
@@ -321,7 +341,11 @@ func TestStoreEmptyList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore failed: %v", err)
 	}
-	defer store.Close()
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Errorf("Failed to close store: %v", err)
+		}
+	}()
 
 	// List should return empty slice, not error
 	entries, err := store.List()

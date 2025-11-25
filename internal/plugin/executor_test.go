@@ -2,7 +2,9 @@ package plugin
 
 import (
 	"bytes"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -11,6 +13,35 @@ import (
 
 	"github.com/spf13/viper"
 )
+
+// buildTestPlugin creates a real executable plugin for testing
+func buildTestPlugin(t *testing.T, dir, name, sourceCode string) string {
+	t.Helper()
+
+	pluginName := "ds-" + name
+	if runtime.GOOS == "windows" {
+		pluginName += ".exe"
+	}
+	pluginPath := filepath.Join(dir, pluginName)
+
+	// Create a temporary Go source file
+	srcFile := filepath.Join(dir, name+".go")
+	if err := os.WriteFile(srcFile, []byte(sourceCode), 0644); err != nil {
+		t.Fatalf("failed to write plugin source: %v", err)
+	}
+
+	// Build the plugin
+	cmd := exec.Command("go", "build", "-o", pluginPath, srcFile)
+	cmd.Env = append(os.Environ(),
+		fmt.Sprintf("GOOS=%s", runtime.GOOS),
+		fmt.Sprintf("GOARCH=%s", runtime.GOARCH),
+	)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("failed to build test plugin: %v\nOutput: %s", err, output)
+	}
+
+	return pluginPath
+}
 
 func TestNewExecutor(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -104,16 +135,15 @@ func TestExecutePlugin_Success(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a simple test plugin
-	pluginPath := filepath.Join(tmpDir, "ds-testexec")
-	if runtime.GOOS == "windows" {
-		pluginPath += ".exe"
-	}
+	sourceCode := `package main
 
-	// Create a script that exits with 0
-	script := "#!/bin/sh\necho 'Hello from plugin'\nexit 0\n"
-	if err := os.WriteFile(pluginPath, []byte(script), 0755); err != nil {
-		t.Fatalf("failed to create test plugin: %v", err)
-	}
+import "fmt"
+
+func main() {
+	fmt.Println("Hello from plugin")
+}
+`
+	buildTestPlugin(t, tmpDir, "testexec", sourceCode)
 
 	// Create manifest
 	manifestPath := filepath.Join(tmpDir, "ds-testexec.yaml")
@@ -151,15 +181,15 @@ func TestExecutePlugin_NonZeroExit(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a plugin that exits with error code
-	pluginPath := filepath.Join(tmpDir, "ds-failplugin")
-	if runtime.GOOS == "windows" {
-		pluginPath += ".exe"
-	}
+	sourceCode := `package main
 
-	script := "#!/bin/sh\nexit 42\n"
-	if err := os.WriteFile(pluginPath, []byte(script), 0755); err != nil {
-		t.Fatalf("failed to create test plugin: %v", err)
-	}
+import "os"
+
+func main() {
+	os.Exit(42)
+}
+`
+	buildTestPlugin(t, tmpDir, "failplugin", sourceCode)
 
 	// Create manifest
 	manifestPath := filepath.Join(tmpDir, "ds-failplugin.yaml")
@@ -195,15 +225,19 @@ func TestExecutePluginWithOutput(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a plugin that outputs to stdout and stderr
-	pluginPath := filepath.Join(tmpDir, "ds-outputplugin")
-	if runtime.GOOS == "windows" {
-		pluginPath += ".exe"
-	}
+	sourceCode := `package main
 
-	script := "#!/bin/sh\necho 'stdout message'\necho 'stderr message' >&2\nexit 0\n"
-	if err := os.WriteFile(pluginPath, []byte(script), 0755); err != nil {
-		t.Fatalf("failed to create test plugin: %v", err)
-	}
+import (
+	"fmt"
+	"os"
+)
+
+func main() {
+	fmt.Println("stdout message")
+	fmt.Fprintln(os.Stderr, "stderr message")
+}
+`
+	buildTestPlugin(t, tmpDir, "outputplugin", sourceCode)
 
 	// Create manifest
 	manifestPath := filepath.Join(tmpDir, "ds-outputplugin.yaml")
@@ -247,15 +281,15 @@ func TestStreamPlugin(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a plugin
-	pluginPath := filepath.Join(tmpDir, "ds-streamplugin")
-	if runtime.GOOS == "windows" {
-		pluginPath += ".exe"
-	}
+	sourceCode := `package main
 
-	script := "#!/bin/sh\necho 'streaming output'\n"
-	if err := os.WriteFile(pluginPath, []byte(script), 0755); err != nil {
-		t.Fatalf("failed to create test plugin: %v", err)
-	}
+import "fmt"
+
+func main() {
+	fmt.Println("streaming output")
+}
+`
+	buildTestPlugin(t, tmpDir, "streamplugin", sourceCode)
 
 	// Create manifest
 	manifestPath := filepath.Join(tmpDir, "ds-streamplugin.yaml")
@@ -302,15 +336,15 @@ func TestExecutePlugin_Timeout(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a plugin that sleeps
-	pluginPath := filepath.Join(tmpDir, "ds-slowplugin")
-	if runtime.GOOS == "windows" {
-		pluginPath += ".exe"
-	}
+	sourceCode := `package main
 
-	script := "#!/bin/sh\nsleep 10\n"
-	if err := os.WriteFile(pluginPath, []byte(script), 0755); err != nil {
-		t.Fatalf("failed to create test plugin: %v", err)
-	}
+import "time"
+
+func main() {
+	time.Sleep(10 * time.Second)
+}
+`
+	buildTestPlugin(t, tmpDir, "slowplugin", sourceCode)
 
 	// Create manifest
 	manifestPath := filepath.Join(tmpDir, "ds-slowplugin.yaml")

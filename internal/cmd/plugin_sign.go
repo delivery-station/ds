@@ -11,6 +11,7 @@ import (
 
 	"github.com/delivery-station/ds/internal/config"
 	"github.com/delivery-station/ds/internal/plugin"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
@@ -141,7 +142,11 @@ func generateKeyPair(privPath, pubPath string, keySize int) error {
 	if err != nil {
 		return fmt.Errorf("failed to create private key file: %w", err)
 	}
-	defer privFile.Close()
+	defer func() {
+		if err := privFile.Close(); err != nil {
+			logrus.WithError(err).Warn("Failed to close private key file")
+		}
+	}()
 
 	if err := pem.Encode(privFile, privKeyPEM); err != nil {
 		return fmt.Errorf("failed to encode private key: %w", err)
@@ -163,7 +168,11 @@ func generateKeyPair(privPath, pubPath string, keySize int) error {
 	if err != nil {
 		return fmt.Errorf("failed to create public key file: %w", err)
 	}
-	defer pubFile.Close()
+	defer func() {
+		if err := pubFile.Close(); err != nil {
+			logrus.WithError(err).Warn("Failed to close public key file")
+		}
+	}()
 
 	if err := pem.Encode(pubFile, pubKeyPEM); err != nil {
 		return fmt.Errorf("failed to encode public key: %w", err)

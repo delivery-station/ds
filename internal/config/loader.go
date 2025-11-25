@@ -267,7 +267,7 @@ func parseSize(s string) (int64, error) {
 	}
 
 	// Convert to bytes
-	multiplier := int64(1)
+	var multiplier int64
 	switch unit {
 	case "B", "":
 		multiplier = 1
