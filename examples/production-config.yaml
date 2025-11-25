@@ -1,0 +1,66 @@
+# DS Configuration - Production Example
+# Optimized for production deployments
+
+# Registry Configuration
+registry:
+  default: "registry.company.com"
+  mirrors:
+    - "registry-mirror-1.company.com"
+    - "registry-mirror-2.company.com"
+
+# Authentication
+auth:
+  docker_config: "~/.docker/config.json"
+
+# Cache Configuration
+cache:
+  # Large cache for production workloads
+  dir: "/var/cache/ds"
+  max_size: "50GB"
+  ttl: "30d"
+  auto_clean: true
+  clean_threshold: 0.8
+
+# Logging Configuration
+logging:
+  # Warn level for production (less noise)
+  level: "warn"
+  
+  # JSON format for log aggregation
+  format: "json"
+  
+  # Log to file for persistence
+  output: "/var/log/ds/ds.log"
+  
+  # Include caller for debugging
+  show_caller: true
+
+# Plugin Configuration
+plugins:
+  # System-wide plugin directory
+  dir: "/usr/local/lib/ds/plugins"
+  
+  # Disable auto-install in production
+  auto_install: false
+  
+  # Use company plugin registry
+  sources:
+    - "registry.company.com/plugins"
+  
+  # Longer timeout for production operations
+  timeout: "10m"
+
+# Proxy Configuration
+proxy:
+  https_proxy: "http://proxy.company.com:3128"
+  no_proxy:
+    - "localhost"
+    - "*.company.com"
+    - "*.internal"
+
+# Communication Configuration
+communication:
+  event_bus_enabled: true
+  event_buffer_size: 200
+  state_store_enabled: true
+  state_ttl: "2h"

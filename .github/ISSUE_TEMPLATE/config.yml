@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or Discussion
+    url: https://github.com/delivery-station/ds/discussions
+    about: Ask questions and discuss with the community
+  - name: Security Vulnerability
+    url: https://github.com/delivery-station/ds/security/advisories/new
+    about: Report security vulnerabilities privately

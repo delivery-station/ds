@@ -1,0 +1,128 @@
+# DS Configuration - Full Featured Example
+# This configuration demonstrates all available options
+
+# Registry Configuration
+registry:
+  # Default registry for plugin and artifact operations
+  default: "ghcr.io"
+  
+  # Alternative registries to try if default fails
+  mirrors:
+    - "registry.example.com"
+    - "mirror.company.net"
+  
+  # Registries that use HTTP instead of HTTPS (development only!)
+  insecure_registries:
+    - "localhost:5000"
+
+# Authentication Configuration
+auth:
+  # Path to Docker config.json (contains registry credentials)
+  docker_config: "~/.docker/config.json"
+  
+  # Explicit credentials (alternative to docker_config)
+  credentials:
+    - registry: "ghcr.io"
+      username: "myuser"
+      password: "${GITHUB_TOKEN}"
+    - registry: "registry.example.com"
+      username: "admin"
+      token: "${REGISTRY_TOKEN}"
+
+# Cache Configuration
+cache:
+  # Cache directory path
+  dir: "~/.cache/ds"
+  
+  # Maximum cache size (supports: B, KB, MB, GB, TB)
+  max_size: "10GB"
+  
+  # Time-to-live for cached artifacts (supports: s, m, h, d, w)
+  ttl: "7d"
+  
+  # Clean cache on startup if size exceeds threshold
+  auto_clean: true
+  
+  # Percentage of max_size to trigger cleanup (0.9 = 90%)
+  clean_threshold: 0.9
+
+# Logging Configuration
+logging:
+  # Log level: trace, debug, info, warn, error
+  level: "info"
+  
+  # Log format: text, json
+  format: "text"
+  
+  # Log output: stdout, stderr, or file path
+  output: "stdout"
+  
+  # Enable colored output (auto-detected if terminal supports)
+  color: true
+  
+  # Include caller information in logs
+  show_caller: false
+
+# Plugin Configuration
+plugins:
+  # Plugin directory path
+  dir: "~/.config/ds/plugins"
+  
+  # Plugin sources (registries to search for plugins during manual installation)
+  sources:
+    - registry: "ghcr.io/delivery-station"
+      version_constraint: ">=1.0.0"
+    - registry: "registry.example.com/plugins"
+  
+  # Plugin execution timeout (0 = no timeout)
+  timeout: "5m"
+  
+  # Enable plugin context passing (for inter-plugin communication)
+  context_enabled: true
+  
+  # Digital signature verification
+  signature:
+    # Verification mode: strict, permissive, or disabled
+    # - strict: Only plugins with valid signatures are allowed
+    # - permissive: Validates signatures when present, warns on unsigned plugins (default)
+    # - disabled: No signature verification
+    mode: "permissive"
+    
+    # Allow unsigned plugins in permissive mode
+    allow_unsigned: true
+    
+    # List of trusted public key files
+    public_keys:
+      - "~/.config/ds/trust/acme-corp.pem"
+      - "~/.config/ds/trust/trusted-dev.pub"
+    
+    # Directory containing trusted public keys (.pem or .pub files)
+    trust_store: "~/.config/ds/trust"
+
+# Proxy Configuration
+proxy:
+  # HTTP proxy for registry operations
+  http_proxy: "${HTTP_PROXY}"
+  
+  # HTTPS proxy for registry operations
+  https_proxy: "${HTTPS_PROXY}"
+  
+  # Hosts to bypass proxy
+  no_proxy:
+    - "localhost"
+    - "127.0.0.1"
+    - "*.internal"
+
+# Communication Configuration (Advanced)
+communication:
+  # Enable event bus
+  event_bus_enabled: true
+  
+  # Event bus buffer size
+  event_buffer_size: 100
+  
+  # Enable state store
+  state_store_enabled: true
+  
+  # State store TTL
+  state_ttl: "1h"

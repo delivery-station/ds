@@ -1,0 +1,57 @@
+# Plugin Manifest
+
+name: my-plugin
+version: 1.0.0
+description: Example DS plugin template
+author: Your Name <your.email@example.com>
+homepage: https://github.com/yourusername/ds-my-plugin
+license: Apache-2.0
+
+# Supported platforms
+platforms:
+  - os: linux
+    arch: amd64
+  - os: linux
+    arch: arm64
+  - os: darwin
+    arch: amd64
+  - os: darwin
+    arch: arm64
+  - os: windows
+    arch: amd64
+
+# Commands provided by this plugin
+commands:
+  - name: hello
+    description: Say hello to someone
+    usage: ds my-plugin hello [name]
+    examples:
+      - ds my-plugin hello World
+      - ds my-plugin hello "John Doe"
+  
+  - name: process
+    description: Process an artifact
+    usage: ds my-plugin process <artifact>
+    examples:
+      - ds my-plugin process ghcr.io/myorg/app:v1.0.0
+      - ds my-plugin process registry.example.com/app:latest
+
+# Dependencies on other plugins (optional)
+dependencies: []
+
+# Configuration schema (optional)
+config:
+  - name: MY_PLUGIN_API_KEY
+    env: MY_PLUGIN_API_KEY
+    description: API key for external service
+    required: false
+    default: ""
+  
+  - name: MY_PLUGIN_TIMEOUT
+    env: MY_PLUGIN_TIMEOUT
+    description: Operation timeout
+    required: false
+    default: "5m"
+
+# Minimum DS version required
+min_ds_version: "1.0.0"

@@ -1,0 +1,24 @@
+# DS Configuration - Minimal Example
+# This is the minimum configuration needed to get started
+
+# Registry Configuration
+registry:
+  default: "ghcr.io"
+
+# Authentication
+auth:
+  docker_config: "~/.docker/config.json"
+
+# Cache
+cache:
+  dir: "~/.cache/ds"
+  max_size: "5GB"
+  ttl: "7d"
+
+# Logging
+logging:
+  level: "info"
+
+# Plugins
+plugins:
+  dir: "~/.config/ds/plugins"
