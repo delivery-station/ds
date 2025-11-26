@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/delivery-station/ds/pkg/log"
 	"github.com/delivery-station/ds/pkg/types"
-	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 )
 
@@ -49,13 +49,13 @@ func (m *Manager) DiscoverPlugins() error {
 
 	// Check if we need to rescan (cache expired)
 	if time.Since(m.lastScan) < m.cacheTTL && len(m.plugins) > 0 {
-		logrus.Debug("Using cached plugin list")
+		log.Debug("Using cached plugin list")
 		return nil
 	}
 
 	// Check if plugin directory exists
 	if _, err := os.Stat(m.pluginDir); os.IsNotExist(err) {
-		logrus.Debugf("Plugin directory does not exist: %s", m.pluginDir)
+		log.Debug("Plugin directory does not exist", "dir", m.pluginDir)
 		m.plugins = make(map[string]*types.PluginInfo)
 		m.lastScan = time.Now()
 		return nil
@@ -100,14 +100,14 @@ func (m *Manager) DiscoverPlugins() error {
 		// Check if executable
 		info, err := os.Stat(pluginPath)
 		if err != nil {
-			logrus.Warnf("Failed to stat plugin %s: %v", name, err)
+			log.Warn("Failed to stat plugin", "name", name, "error", err)
 			continue
 		}
 
 		// On Unix-like systems, check executable bit
 		if runtime.GOOS != "windows" {
 			if info.Mode()&0111 == 0 {
-				logrus.Debugf("Skipping non-executable file: %s", name)
+				log.Debug("Skipping non-executable file", "name", name)
 				continue
 			}
 		}
@@ -121,7 +121,7 @@ func (m *Manager) DiscoverPlugins() error {
 		// Try to get version from plugin
 		version, err := m.getPluginVersion(pluginPath)
 		if err != nil {
-			logrus.Debugf("Failed to get version for %s: %v", pluginName, err)
+			log.Debug("Failed to get version", "plugin", pluginName, "error", err)
 			pluginInfo.Version = "unknown"
 		} else {
 			pluginInfo.Version = version
@@ -130,7 +130,7 @@ func (m *Manager) DiscoverPlugins() error {
 		// Try to load manifest
 		manifest, err := m.loadPluginManifest(pluginPath)
 		if err != nil {
-			logrus.Debugf("No manifest found for %s: %v", pluginName, err)
+			log.Debug("No manifest found", "plugin", pluginName, "error", err)
 		} else {
 			pluginInfo.Manifest = manifest
 			pluginInfo.Description = manifest.Description
@@ -143,15 +143,15 @@ func (m *Manager) DiscoverPlugins() error {
 
 		// Validate platform compatibility
 		if !m.isCompatiblePlatform(pluginInfo) {
-			logrus.Warnf("Plugin %s is not compatible with current platform (%s/%s)",
-				pluginName, runtime.GOOS, runtime.GOARCH)
+			log.Warn("Plugin is not compatible with current platform",
+				"plugin", pluginName, "os", runtime.GOOS, "arch", runtime.GOARCH)
 			continue
 		}
 
 		// Verify signature if verifier is configured
 		if m.verifier != nil {
 			if err := m.verifier.VerifyPlugin(pluginPath); err != nil {
-				logrus.Warnf("Plugin %s failed signature verification: %v", pluginName, err)
+				log.Warn("Plugin failed signature verification", "plugin", pluginName, "error", err)
 				// In strict mode, skip the plugin
 				if m.verifier.config.Mode == SignatureModeStrict {
 					continue
@@ -160,11 +160,11 @@ func (m *Manager) DiscoverPlugins() error {
 		}
 
 		m.plugins[pluginName] = pluginInfo
-		logrus.Debugf("Discovered plugin: %s (version: %s)", pluginName, pluginInfo.Version)
+		log.Debug("Discovered plugin", "plugin", pluginName, "version", pluginInfo.Version)
 	}
 
 	m.lastScan = time.Now()
-	logrus.Infof("Discovered %d plugin(s)", len(m.plugins))
+	log.Info("Discovered plugin(s)", "count", len(m.plugins))
 
 	return nil
 }
@@ -277,7 +277,7 @@ func (m *Manager) loadPluginManifest(pluginPath string) (*types.PluginManifest, 
 		if err == nil {
 			manifestData = data
 			manifestErr = nil
-			logrus.Debugf("Found manifest: %s", manifestPath)
+			log.Debug("Found manifest", "path", manifestPath)
 			break
 		}
 		manifestErr = err

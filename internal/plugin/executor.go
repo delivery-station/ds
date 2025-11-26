@@ -3,14 +3,18 @@ package plugin
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"strings"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/delivery-station/ds/pkg/log"
 	"github.com/spf13/viper"
+
+	pkgplugin "github.com/delivery-station/ds/pkg/plugin"
+	"github.com/delivery-station/ds/pkg/types"
+	"github.com/hashicorp/go-hclog"
+	"github.com/hashicorp/go-plugin"
 )
 
 // Executor handles plugin execution
@@ -35,7 +39,7 @@ func (e *Executor) SetTimeout(timeout time.Duration) {
 // ExecutePlugin executes a plugin with the given arguments
 func (e *Executor) ExecutePlugin(pluginName string, args []string) (int, error) {
 	// Get plugin info
-	plugin, err := e.manager.GetPlugin(pluginName)
+	p, err := e.manager.GetPlugin(pluginName)
 	if err != nil {
 		return 1, fmt.Errorf("plugin '%s' not found. Use 'ds plugin list' to see available plugins", pluginName)
 	}
@@ -45,30 +49,84 @@ func (e *Executor) ExecutePlugin(pluginName string, args []string) (int, error) 
 		return 1, fmt.Errorf("plugin '%s' is invalid: %w", pluginName, err)
 	}
 
-	logrus.Debugf("Executing plugin: %s %v", pluginName, args)
+	log.Debug("Executing plugin", "name", pluginName, "args", args)
+
+	// Create client
+	client := plugin.NewClient(&plugin.ClientConfig{
+		HandshakeConfig: pkgplugin.Handshake,
+		Plugins:         pkgplugin.PluginMap,
+		Cmd:             exec.Command(p.Path),
+		AllowedProtocols: []plugin.Protocol{
+			plugin.ProtocolGRPC,
+		},
+		Logger: hclog.New(&hclog.LoggerOptions{
+			Name:   "ds-plugin",
+			Output: os.Stderr,
+			Level:  hclog.Error,
+		}),
+	})
+	defer client.Kill()
+
+	// Connect via RPC
+	rpcClient, err := client.Client()
+	if err != nil {
+		return 1, fmt.Errorf("failed to connect to plugin: %w", err)
+	}
+
+	// Request the plugin
+	raw, err := rpcClient.Dispense("ds-plugin")
+	if err != nil {
+		return 1, fmt.Errorf("failed to dispense plugin: %w", err)
+	}
+
+	// Cast to our interface
+	dsPlugin, ok := raw.(types.PluginProtocol)
+	if !ok {
+		return 1, fmt.Errorf("plugin does not implement PluginProtocol")
+	}
 
 	// Prepare environment
+	envMap := make(map[string]string)
 	env := e.PrepareEnvironment()
+	for _, e := range env {
+		parts := strings.SplitN(e, "=", 2)
+		if len(parts) == 2 {
+			envMap[parts[0]] = parts[1]
+		}
+	}
 
-	// Create command with timeout context
+	// Execute
 	ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, plugin.Path, args...)
-	cmd.Env = env
+	// The first arg is the operation (e.g. "fetch"), the rest are args
+	if len(args) == 0 {
+		return 1, fmt.Errorf("no operation specified")
+	}
+	operation := args[0]
+	opArgs := args[1:]
 
-	// Setup I/O streaming
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
+	result, err := dsPlugin.Execute(ctx, operation, opArgs, envMap)
+	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return 124, fmt.Errorf("plugin execution timed out")
+		}
+		return 1, fmt.Errorf("plugin execution failed: %w", err)
+	}
 
-	// Execute plugin
-	err = cmd.Run()
+	// Print output
+	if result.Stdout != "" {
+		fmt.Println(result.Stdout)
+	}
+	if result.Stderr != "" {
+		fmt.Fprint(os.Stderr, result.Stderr)
+	}
 
-	// Handle errors
-	exitCode := e.HandleError(err, ctx, pluginName)
+	if result.Error != "" {
+		return result.ExitCode, fmt.Errorf("%s", result.Error)
+	}
 
-	return exitCode, nil
+	return result.ExitCode, nil
 }
 
 // PrepareEnvironment prepares environment variables for plugin execution
@@ -104,7 +162,7 @@ func (e *Executor) PrepareEnvironment() []string {
 		env = append(env, fmt.Sprintf("DS_REGISTRY_DEFAULT=%s", registry))
 	}
 
-	logrus.Debugf("Prepared %d environment variables for plugin", len(env))
+	log.Debug("Prepared environment variables for plugin", "count", len(env))
 
 	return env
 }
@@ -117,26 +175,26 @@ func (e *Executor) HandleError(err error, ctx context.Context, pluginName string
 
 	// Check for timeout
 	if ctx.Err() == context.DeadlineExceeded {
-		logrus.Errorf("Plugin '%s' timed out after %v", pluginName, e.timeout)
+		log.Error("Plugin timed out", "plugin", pluginName, "timeout", e.timeout)
 		return 124 // Standard timeout exit code
 	}
 
 	// Check for exit error
 	if exitErr, ok := err.(*exec.ExitError); ok {
 		exitCode := exitErr.ExitCode()
-		logrus.Debugf("Plugin '%s' exited with code %d", pluginName, exitCode)
+		log.Debug("Plugin exited", "plugin", pluginName, "code", exitCode)
 		return exitCode
 	}
 
 	// Other errors
-	logrus.Errorf("Failed to execute plugin '%s': %v", pluginName, err)
+	log.Error("Failed to execute plugin", "plugin", pluginName, "error", err)
 	return 1
 }
 
 // ExecutePluginWithOutput executes a plugin and captures its output
 func (e *Executor) ExecutePluginWithOutput(pluginName string, args []string) (string, string, int, error) {
 	// Get plugin info
-	plugin, err := e.manager.GetPlugin(pluginName)
+	p, err := e.manager.GetPlugin(pluginName)
 	if err != nil {
 		return "", "", 1, fmt.Errorf("plugin '%s' not found", pluginName)
 	}
@@ -146,65 +204,67 @@ func (e *Executor) ExecutePluginWithOutput(pluginName string, args []string) (st
 		return "", "", 1, fmt.Errorf("plugin '%s' is invalid: %w", pluginName, err)
 	}
 
-	logrus.Debugf("Executing plugin with output capture: %s %v", pluginName, args)
+	log.Debug("Executing plugin with output capture", "plugin", pluginName, "args", args)
 
-	// Prepare environment
-	env := e.PrepareEnvironment()
+	// Create client
+	client := plugin.NewClient(&plugin.ClientConfig{
+		HandshakeConfig: pkgplugin.Handshake,
+		Plugins:         pkgplugin.PluginMap,
+		Cmd:             exec.Command(p.Path),
+		AllowedProtocols: []plugin.Protocol{
+			plugin.ProtocolGRPC,
+		},
+		Logger: hclog.New(&hclog.LoggerOptions{
+			Name:   "ds-plugin",
+			Output: os.Stderr,
+			Level:  hclog.Error,
+		}),
+	})
+	defer client.Kill()
 
-	// Create command with timeout context
-	ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, plugin.Path, args...)
-	cmd.Env = env
-
-	// Capture output
-	var stdout, stderr strings.Builder
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	// Execute plugin
-	err = cmd.Run()
-
-	// Handle errors
-	exitCode := e.HandleError(err, ctx, pluginName)
-
-	return stdout.String(), stderr.String(), exitCode, nil
-}
-
-// StreamPlugin executes a plugin with real-time output streaming
-func (e *Executor) StreamPlugin(pluginName string, args []string, stdout, stderr io.Writer) (int, error) {
-	// Get plugin info
-	plugin, err := e.manager.GetPlugin(pluginName)
+	// Connect via RPC
+	rpcClient, err := client.Client()
 	if err != nil {
-		return 1, fmt.Errorf("plugin '%s' not found", pluginName)
+		return "", "", 1, fmt.Errorf("failed to connect to plugin: %w", err)
 	}
 
-	// Validate plugin
-	if err := e.manager.ValidatePlugin(pluginName); err != nil {
-		return 1, fmt.Errorf("plugin '%s' is invalid: %w", pluginName, err)
+	// Request the plugin
+	raw, err := rpcClient.Dispense("ds-plugin")
+	if err != nil {
+		return "", "", 1, fmt.Errorf("failed to dispense plugin: %w", err)
 	}
 
-	logrus.Debugf("Streaming plugin: %s %v", pluginName, args)
+	// Cast to our interface
+	dsPlugin, ok := raw.(types.PluginProtocol)
+	if !ok {
+		return "", "", 1, fmt.Errorf("plugin does not implement PluginProtocol")
+	}
 
 	// Prepare environment
+	envMap := make(map[string]string)
 	env := e.PrepareEnvironment()
+	for _, e := range env {
+		parts := strings.SplitN(e, "=", 2)
+		if len(parts) == 2 {
+			envMap[parts[0]] = parts[1]
+		}
+	}
 
-	// Create command with timeout context
+	// Execute
 	ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, plugin.Path, args...)
-	cmd.Env = env
-	cmd.Stdout = stdout
-	cmd.Stderr = stderr
-	cmd.Stdin = os.Stdin
+	// The first arg is the operation (e.g. "fetch"), the rest are args
+	if len(args) == 0 {
+		return "", "", 1, fmt.Errorf("no operation specified")
+	}
+	operation := args[0]
+	opArgs := args[1:]
 
-	// Execute plugin
-	err = cmd.Run()
+	result, err := dsPlugin.Execute(ctx, operation, opArgs, envMap)
+	if err != nil {
+		return "", "", 1, fmt.Errorf("plugin execution failed: %w", err)
+	}
 
-	// Handle errors
-	exitCode := e.HandleError(err, ctx, pluginName)
-
-	return exitCode, nil
+	return result.Stdout, result.Stderr, result.ExitCode, nil
 }

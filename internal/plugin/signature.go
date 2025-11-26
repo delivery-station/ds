@@ -11,8 +11,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/delivery-station/ds/pkg/log"
 	"github.com/delivery-station/ds/pkg/types"
-	"github.com/sirupsen/logrus"
+	"github.com/hashicorp/go-hclog"
 )
 
 const (
@@ -28,41 +29,51 @@ const (
 type SignatureVerifier struct {
 	config     *types.SignatureConfig
 	publicKeys []*rsa.PublicKey
+	logger     hclog.Logger
 }
 
 // NewSignatureVerifier creates a new signature verifier
-func NewSignatureVerifier(config *types.SignatureConfig) (*SignatureVerifier, error) {
+func NewSignatureVerifier(config *types.SignatureConfig, logger hclog.Logger) (*SignatureVerifier, error) {
+	if logger == nil {
+		logger = hclog.New(&hclog.LoggerOptions{
+			Name:  "signature-verifier",
+			Level: hclog.Info,
+		})
+	}
+
 	if config == nil || config.Mode == SignatureModeDisabled || config.Mode == "" {
 		return &SignatureVerifier{
 			config:     &types.SignatureConfig{Mode: SignatureModeDisabled},
 			publicKeys: nil,
+			logger:     logger,
 		}, nil
 	}
 
 	v := &SignatureVerifier{
 		config:     config,
 		publicKeys: make([]*rsa.PublicKey, 0),
+		logger:     logger,
 	}
 
 	// Load public keys from specified paths
 	for _, keyPath := range config.PublicKeys {
 		key, err := v.loadPublicKey(keyPath)
 		if err != nil {
-			logrus.Warnf("Failed to load public key from %s: %v", keyPath, err)
+			logger.Warn("Failed to load public key", "path", keyPath, "error", err)
 			continue
 		}
 		v.publicKeys = append(v.publicKeys, key)
-		logrus.Debugf("Loaded public key from %s", keyPath)
+		logger.Debug("Loaded public key", "path", keyPath)
 	}
 
 	// Load public keys from trust store directory
 	if config.TrustStore != "" {
 		keys, err := v.loadTrustStore(config.TrustStore)
 		if err != nil {
-			logrus.Warnf("Failed to load trust store from %s: %v", config.TrustStore, err)
+			logger.Warn("Failed to load trust store", "path", config.TrustStore, "error", err)
 		} else {
 			v.publicKeys = append(v.publicKeys, keys...)
-			logrus.Debugf("Loaded %d keys from trust store %s", len(keys), config.TrustStore)
+			logger.Debug("Loaded public keys from trust store", "path", config.TrustStore, "count", len(keys))
 		}
 	}
 
@@ -107,7 +118,7 @@ func (v *SignatureVerifier) VerifyPlugin(binaryPath string) error {
 		err := rsa.VerifyPKCS1v15(pubKey, crypto.SHA256, hash[:], sigData)
 		if err == nil {
 			verified = true
-			logrus.Debugf("Plugin %s verified with public key #%d", filepath.Base(binaryPath), i+1)
+			v.logger.Debug("Plugin verified with public key", "plugin", filepath.Base(binaryPath), "key_index", i+1)
 			break
 		}
 		lastErr = err
@@ -121,11 +132,11 @@ func (v *SignatureVerifier) VerifyPlugin(binaryPath string) error {
 			return fmt.Errorf("signature verification failed: %w", lastErr)
 		}
 		// Permissive mode - warn but allow
-		logrus.Warnf("Plugin %s has invalid signature, but permissive mode allows it", filepath.Base(binaryPath))
+		v.logger.Warn("Plugin has invalid signature, but permissive mode allows it", "plugin", filepath.Base(binaryPath))
 		return nil
 	}
 
-	logrus.Infof("Plugin %s signature verified successfully", filepath.Base(binaryPath))
+	v.logger.Info("Plugin signature verified successfully", "plugin", filepath.Base(binaryPath))
 	return nil
 }
 
@@ -138,7 +149,7 @@ func (v *SignatureVerifier) handleUnsignedPlugin(binaryPath string) error {
 		return fmt.Errorf("plugin %s is not signed (strict mode requires signatures)", pluginName)
 	case SignatureModePermissive:
 		if v.config.AllowUnsigned {
-			logrus.Warnf("⚠️  Plugin %s is not signed (running in permissive mode)", pluginName)
+			v.logger.Warn("⚠️  Plugin is not signed (running in permissive mode)", "plugin", pluginName)
 			return nil
 		}
 		return fmt.Errorf("plugin %s is not signed (allow_unsigned is false)", pluginName)
@@ -223,7 +234,7 @@ func (v *SignatureVerifier) loadTrustStore(dir string) ([]*rsa.PublicKey, error)
 		// Try to load key
 		key, err := v.loadPublicKey(path)
 		if err != nil {
-			logrus.Debugf("Skipping %s: %v", path, err)
+			v.logger.Debug("Skipping key file", "path", path, "error", err)
 			return nil
 		}
 
@@ -280,6 +291,6 @@ func SignPlugin(binaryPath, privateKeyPath string) error {
 		return fmt.Errorf("failed to write signature: %w", err)
 	}
 
-	logrus.Infof("Plugin signed successfully: %s", sigPath)
+	log.Info("Plugin signed successfully", "path", sigPath)
 	return nil
 }

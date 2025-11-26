@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/hashicorp/go-hclog"
 )
 
 // Cache provides artifact caching functionality
@@ -21,7 +21,7 @@ type Cache struct {
 	maxSize int64 // Maximum cache size in bytes
 	ttl     time.Duration
 	mu      sync.RWMutex
-	logger  *logrus.Logger
+	logger  hclog.Logger
 }
 
 // CacheEntry represents a cached artifact
@@ -36,9 +36,12 @@ type CacheEntry struct {
 }
 
 // NewCache creates a new cache instance
-func NewCache(dir string, maxSize int64, ttl time.Duration, logger *logrus.Logger) (*Cache, error) {
+func NewCache(dir string, maxSize int64, ttl time.Duration, logger hclog.Logger) (*Cache, error) {
 	if logger == nil {
-		logger = logrus.New()
+		logger = hclog.New(&hclog.LoggerOptions{
+			Name:  "cache",
+			Level: hclog.Info,
+		})
 	}
 
 	// Ensure cache directory exists
@@ -73,10 +76,7 @@ func (c *Cache) Get(ctx context.Context, reference string) (*CacheEntry, error) 
 	defer c.mu.RUnlock()
 
 	key := GenerateKey(reference)
-	c.logger.WithFields(logrus.Fields{
-		"reference": reference,
-		"key":       key,
-	}).Debug("Getting artifact from cache")
+	c.logger.Debug("Getting artifact from cache", "reference", reference, "key", key)
 
 	// Get entry from store
 	entry, err := c.store.Get(key)
@@ -86,7 +86,7 @@ func (c *Cache) Get(ctx context.Context, reference string) (*CacheEntry, error) 
 
 	// Check if expired
 	if c.ttl > 0 && time.Since(entry.CreatedAt) > c.ttl {
-		c.logger.WithField("key", key).Debug("Cache entry expired")
+		c.logger.Debug("Cache entry expired", "key", key)
 		// Remove expired entry (unlock first to avoid deadlock)
 		c.mu.RUnlock()
 		_ = c.Remove(key) // Ignore error as entry is already considered expired
@@ -96,7 +96,7 @@ func (c *Cache) Get(ctx context.Context, reference string) (*CacheEntry, error) 
 
 	// Check if content file exists
 	if _, err := os.Stat(entry.ContentPath); os.IsNotExist(err) {
-		c.logger.WithField("key", key).Warn("Cache content file missing")
+		c.logger.Warn("Cache content file missing", "key", key)
 		return nil, fmt.Errorf("cache content file not found")
 	}
 
@@ -104,14 +104,10 @@ func (c *Cache) Get(ctx context.Context, reference string) (*CacheEntry, error) 
 	entry.AccessedAt = time.Now()
 	entry.AccessCount++
 	if err := c.store.Update(entry); err != nil {
-		c.logger.WithError(err).Warn("Failed to update cache entry metadata")
+		c.logger.Warn("Failed to update cache entry metadata", "error", err)
 	}
 
-	c.logger.WithFields(logrus.Fields{
-		"reference": reference,
-		"key":       key,
-		"size":      entry.Size,
-	}).Info("Cache hit")
+	c.logger.Info("Cache hit", "reference", reference, "key", key, "size", entry.Size)
 
 	return entry, nil
 }
@@ -122,10 +118,7 @@ func (c *Cache) Put(ctx context.Context, reference string, reader io.Reader) (*C
 	defer c.mu.Unlock()
 
 	key := GenerateKey(reference)
-	c.logger.WithFields(logrus.Fields{
-		"reference": reference,
-		"key":       key,
-	}).Debug("Putting artifact in cache")
+	c.logger.Debug("Putting artifact in cache", "reference", reference, "key", key)
 
 	// Create entry directory
 	entryDir := filepath.Join(c.dir, key)
@@ -141,7 +134,7 @@ func (c *Cache) Put(ctx context.Context, reference string, reader io.Reader) (*C
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			c.logger.WithError(err).Warn("Failed to close cache content file")
+			c.logger.Warn("Failed to close cache content file", "error", err)
 		}
 	}()
 
@@ -156,15 +149,14 @@ func (c *Cache) Put(ctx context.Context, reference string, reader io.Reader) (*C
 	if c.maxSize > 0 {
 		currentSize, err := c.sizeNoLock()
 		if err != nil {
-			c.logger.WithError(err).Warn("Failed to calculate cache size")
+			c.logger.Warn("Failed to calculate cache size", "error", err)
 		} else if currentSize+size > c.maxSize {
-			c.logger.WithFields(logrus.Fields{
-				"current_size": currentSize,
-				"new_size":     size,
-				"max_size":     c.maxSize,
-			}).Info("Cache size limit exceeded, evicting entries")
+			c.logger.Info("Cache size limit exceeded, evicting entries",
+				"current_size", currentSize,
+				"new_size", size,
+				"max_size", c.maxSize)
 			if err := c.evictLRUNoLock(currentSize + size - c.maxSize); err != nil {
-				c.logger.WithError(err).Warn("Failed to evict cache entries")
+				c.logger.Warn("Failed to evict cache entries", "error", err)
 			}
 		}
 	}
@@ -187,11 +179,7 @@ func (c *Cache) Put(ctx context.Context, reference string, reader io.Reader) (*C
 		return nil, fmt.Errorf("failed to store cache entry metadata: %w", err)
 	}
 
-	c.logger.WithFields(logrus.Fields{
-		"reference": reference,
-		"key":       key,
-		"size":      size,
-	}).Info("Artifact cached")
+	c.logger.Info("Artifact cached", "reference", reference, "key", key, "size", size)
 
 	return entry, nil
 }
@@ -209,7 +197,7 @@ func (c *Cache) Remove(key string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.logger.WithField("key", key).Debug("Removing cache entry")
+	c.logger.Debug("Removing cache entry", "key", key)
 
 	// Get entry to find content path
 	entry, err := c.store.Get(key)
@@ -220,7 +208,7 @@ func (c *Cache) Remove(key string) error {
 	// Remove content directory
 	entryDir := filepath.Dir(entry.ContentPath)
 	if err := os.RemoveAll(entryDir); err != nil {
-		c.logger.WithError(err).Warn("Failed to remove cache content directory")
+		c.logger.Warn("Failed to remove cache content directory", "error", err)
 	}
 
 	// Remove from store
@@ -228,7 +216,7 @@ func (c *Cache) Remove(key string) error {
 		return err
 	}
 
-	c.logger.WithField("key", key).Info("Cache entry removed")
+	c.logger.Info("Cache entry removed", "key", key)
 	return nil
 }
 
@@ -250,28 +238,27 @@ func (c *Cache) Clean() (int, error) {
 	for _, entry := range entries {
 		// Check if expired
 		if c.ttl > 0 && now.Sub(entry.CreatedAt) > c.ttl {
-			c.logger.WithFields(logrus.Fields{
-				"key": entry.Key,
-				"age": now.Sub(entry.CreatedAt),
-				"ttl": c.ttl,
-			}).Debug("Removing expired entry")
+			c.logger.Debug("Removing expired entry",
+				"key", entry.Key,
+				"age", now.Sub(entry.CreatedAt),
+				"ttl", c.ttl)
 
 			// Remove content directory
 			entryDir := filepath.Dir(entry.ContentPath)
 			if err := os.RemoveAll(entryDir); err != nil {
-				c.logger.WithError(err).Warn("Failed to remove expired content")
+				c.logger.Warn("Failed to remove expired content", "error", err)
 			}
 
 			// Remove from store
 			if err := c.store.Delete(entry.Key); err != nil {
-				c.logger.WithError(err).Warn("Failed to remove expired entry from store")
+				c.logger.Warn("Failed to remove expired entry from store", "error", err)
 			} else {
 				removed++
 			}
 		}
 	}
 
-	c.logger.WithField("removed", removed).Info("Cache cleanup complete")
+	c.logger.Info("Cache cleanup complete", "removed", removed)
 	return removed, nil
 }
 
@@ -321,31 +308,29 @@ func (c *Cache) evictLRUNoLock(targetBytes int64) error {
 			break
 		}
 
-		c.logger.WithFields(logrus.Fields{
-			"key":         entry.Key,
-			"reference":   entry.Reference,
-			"size":        entry.Size,
-			"last_access": entry.AccessedAt,
-		}).Debug("Evicting cache entry")
+		c.logger.Debug("Evicting cache entry",
+			"key", entry.Key,
+			"reference", entry.Reference,
+			"size", entry.Size,
+			"last_access", entry.AccessedAt)
 
 		// Remove content directory
 		entryDir := filepath.Dir(entry.ContentPath)
 		if err := os.RemoveAll(entryDir); err != nil {
-			c.logger.WithError(err).Warn("Failed to remove evicted content")
+			c.logger.Warn("Failed to remove evicted content", "error", err)
 		}
 
 		// Remove from store
 		if err := c.store.Delete(entry.Key); err != nil {
-			c.logger.WithError(err).Warn("Failed to remove evicted entry from store")
+			c.logger.Warn("Failed to remove evicted entry from store", "error", err)
 		} else {
 			freedBytes += entry.Size
 		}
 	}
 
-	c.logger.WithFields(logrus.Fields{
-		"target_bytes": targetBytes,
-		"freed_bytes":  freedBytes,
-	}).Info("LRU eviction complete")
+	c.logger.Info("Cache eviction complete",
+		"target_bytes", targetBytes,
+		"freed_bytes", freedBytes)
 
 	return nil
 }

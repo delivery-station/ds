@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/delivery-station/ds/pkg/types"
+	"github.com/hashicorp/go-hclog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -19,7 +20,8 @@ func TestSignatureVerifier_Disabled(t *testing.T) {
 		Mode: SignatureModeDisabled,
 	}
 
-	verifier, err := NewSignatureVerifier(config)
+	logger := hclog.New(&hclog.LoggerOptions{Name: "test", Level: hclog.Debug})
+	verifier, err := NewSignatureVerifier(config, logger)
 	require.NoError(t, err)
 	assert.NotNil(t, verifier)
 
@@ -40,7 +42,8 @@ func TestSignatureVerifier_Permissive_Unsigned(t *testing.T) {
 		AllowUnsigned: true,
 	}
 
-	verifier, err := NewSignatureVerifier(config)
+	logger := hclog.New(&hclog.LoggerOptions{Name: "test", Level: hclog.Debug})
+	verifier, err := NewSignatureVerifier(config, logger)
 	require.NoError(t, err)
 
 	// Create a test binary without signature
@@ -65,7 +68,8 @@ func TestSignatureVerifier_Strict_Unsigned(t *testing.T) {
 		PublicKeys: []string{pubKeyPath},
 	}
 
-	verifier, err := NewSignatureVerifier(config)
+	logger := hclog.New(&hclog.LoggerOptions{Name: "test", Level: hclog.Debug})
+	verifier, err := NewSignatureVerifier(config, logger)
 	require.NoError(t, err)
 
 	// Create a test binary without signature
@@ -105,7 +109,8 @@ func TestSignatureVerifier_ValidSignature(t *testing.T) {
 		PublicKeys: []string{pubKeyPath},
 	}
 
-	verifier, err := NewSignatureVerifier(config)
+	logger := hclog.New(&hclog.LoggerOptions{Name: "test", Level: hclog.Debug})
+	verifier, err := NewSignatureVerifier(config, logger)
 	require.NoError(t, err)
 
 	// Should verify successfully
@@ -137,7 +142,8 @@ func TestSignatureVerifier_InvalidSignature(t *testing.T) {
 		PublicKeys: []string{pubKeyPath},
 	}
 
-	verifier, err := NewSignatureVerifier(config)
+	logger := hclog.New(&hclog.LoggerOptions{Name: "test", Level: hclog.Debug})
+	verifier, err := NewSignatureVerifier(config, logger)
 	require.NoError(t, err)
 
 	// Should fail verification
@@ -171,7 +177,8 @@ func TestSignatureVerifier_ModifiedBinary(t *testing.T) {
 		PublicKeys: []string{pubKeyPath},
 	}
 
-	verifier, err := NewSignatureVerifier(config)
+	logger := hclog.New(&hclog.LoggerOptions{Name: "test", Level: hclog.Debug})
+	verifier, err := NewSignatureVerifier(config, logger)
 	require.NoError(t, err)
 
 	// Should fail verification (binary was modified after signing)
@@ -206,7 +213,8 @@ func TestSignatureVerifier_TrustStore(t *testing.T) {
 		TrustStore: trustStore,
 	}
 
-	verifier, err := NewSignatureVerifier(config)
+	logger := hclog.New(&hclog.LoggerOptions{Name: "test", Level: hclog.Debug})
+	verifier, err := NewSignatureVerifier(config, logger)
 	require.NoError(t, err)
 	assert.Len(t, verifier.publicKeys, 1)
 
@@ -242,7 +250,8 @@ func TestSignatureVerifier_MultipleKeys(t *testing.T) {
 		PublicKeys: []string{pubKeyPath1, pubKeyPath2},
 	}
 
-	verifier, err := NewSignatureVerifier(config)
+	logger := hclog.New(&hclog.LoggerOptions{Name: "test", Level: hclog.Debug})
+	verifier, err := NewSignatureVerifier(config, logger)
 	require.NoError(t, err)
 	assert.Len(t, verifier.publicKeys, 2)
 

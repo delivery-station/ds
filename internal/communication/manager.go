@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/sirupsen/logrus"
+	"github.com/hashicorp/go-hclog"
 )
 
 // Manager manages all inter-plugin communication
@@ -13,14 +13,14 @@ type Manager struct {
 	stateStore     *StateStore
 	eventBus       *EventBus
 	pluginRegistry *PluginRegistry
-	logger         *logrus.Logger
+	logger         hclog.Logger
 }
 
 // ManagerConfig holds configuration for the communication manager
 type ManagerConfig struct {
 	StateDir        string
 	EventBufferSize int
-	Logger          *logrus.Logger
+	Logger          hclog.Logger
 }
 
 // NewManager creates a new communication manager
@@ -31,7 +31,7 @@ func NewManager(config *ManagerConfig) (*Manager, error) {
 
 	logger := config.Logger
 	if logger == nil {
-		logger = logrus.New()
+		logger = hclog.NewNullLogger()
 	}
 
 	// Create state store
@@ -88,7 +88,7 @@ func (m *Manager) handlePluginStarted(ctx context.Context, event *Event) error {
 
 	err := m.pluginRegistry.UpdateStatus(ctx, pluginID, PluginStatusRunning)
 	if err != nil {
-		m.logger.Warnf("Failed to update plugin status: %v", err)
+		m.logger.Warn("Failed to update plugin status", "error", err)
 	}
 
 	return nil
@@ -103,7 +103,7 @@ func (m *Manager) handlePluginFinished(ctx context.Context, event *Event) error 
 
 	err := m.pluginRegistry.UpdateStatus(ctx, pluginID, PluginStatusFinished)
 	if err != nil {
-		m.logger.Warnf("Failed to update plugin status: %v", err)
+		m.logger.Warn("Failed to update plugin status", "error", err)
 	}
 
 	return nil
@@ -118,7 +118,7 @@ func (m *Manager) handlePluginFailed(ctx context.Context, event *Event) error {
 
 	err := m.pluginRegistry.UpdateStatus(ctx, pluginID, PluginStatusFailed)
 	if err != nil {
-		m.logger.Warnf("Failed to update plugin status: %v", err)
+		m.logger.Warn("Failed to update plugin status", "error", err)
 	}
 
 	return nil

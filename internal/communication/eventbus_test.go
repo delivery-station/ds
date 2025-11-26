@@ -6,14 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/hashicorp/go-hclog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestNewEventBus(t *testing.T) {
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	bus := NewEventBus(logger, 10)
 	require.NotNil(t, bus)
@@ -23,8 +22,7 @@ func TestNewEventBus(t *testing.T) {
 }
 
 func TestEventBusSubscribe(t *testing.T) {
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	bus := NewEventBus(logger, 10)
 	defer bus.Close()
@@ -58,8 +56,7 @@ func TestEventBusSubscribe(t *testing.T) {
 }
 
 func TestEventBusMultipleSubscribers(t *testing.T) {
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	bus := NewEventBus(logger, 10)
 	defer bus.Close()
@@ -102,8 +99,7 @@ func TestEventBusMultipleSubscribers(t *testing.T) {
 }
 
 func TestEventBusSubscribeAll(t *testing.T) {
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	bus := NewEventBus(logger, 10)
 	defer bus.Close()
@@ -148,8 +144,7 @@ func TestEventBusSubscribeAll(t *testing.T) {
 }
 
 func TestEventBusEventData(t *testing.T) {
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	bus := NewEventBus(logger, 10)
 	defer bus.Close()
@@ -193,8 +188,7 @@ func TestEventBusEventData(t *testing.T) {
 }
 
 func TestEventBusNoSubscribers(t *testing.T) {
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	bus := NewEventBus(logger, 10)
 	defer bus.Close()
@@ -212,8 +206,7 @@ func TestEventBusNoSubscribers(t *testing.T) {
 }
 
 func TestEventBusClose(t *testing.T) {
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	bus := NewEventBus(logger, 10)
 
@@ -250,8 +243,7 @@ func TestEventBusClose(t *testing.T) {
 }
 
 func TestEventBusTimestamp(t *testing.T) {
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	bus := NewEventBus(logger, 10)
 	defer bus.Close()
@@ -290,8 +282,7 @@ func TestEventBusTimestamp(t *testing.T) {
 }
 
 func TestEventBusConcurrentPublish(t *testing.T) {
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	bus := NewEventBus(logger, 100)
 	defer bus.Close()

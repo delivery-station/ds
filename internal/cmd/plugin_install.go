@@ -8,7 +8,7 @@ import (
 	"github.com/delivery-station/ds/internal/config"
 	"github.com/delivery-station/ds/internal/plugin"
 	"github.com/delivery-station/ds/internal/registry"
-	"github.com/sirupsen/logrus"
+	"github.com/delivery-station/ds/pkg/log"
 	"github.com/spf13/cobra"
 )
 
@@ -79,7 +79,7 @@ func runPluginInstall(cmd *cobra.Command, args []string) error {
 	// Parse reference (name[@version])
 	name, version := parsePluginReference(ref)
 
-	logrus.Infof("Installing plugin %s", name)
+	log.Info("Installing plugin", "name", name)
 
 	// Load configuration
 	loader := config.NewLoader()
@@ -91,7 +91,7 @@ func runPluginInstall(cmd *cobra.Command, args []string) error {
 	// Set up authentication
 	authProvider := registry.NewAuthProvider()
 	if err := authProvider.LoadDockerConfig(); err != nil {
-		logrus.Warnf("Failed to load Docker config: %v", err)
+		log.Warn("Failed to load Docker config", "error", err)
 	}
 
 	// Create registry client
@@ -109,7 +109,7 @@ func runPluginInstall(cmd *cobra.Command, args []string) error {
 	installer := plugin.NewInstaller(cfg.Plugins.Dir, registryURL, client)
 
 	// Set up signature verification
-	verifier, err := plugin.NewSignatureVerifier(&cfg.Plugins.Signature)
+	verifier, err := plugin.NewSignatureVerifier(&cfg.Plugins.Signature, log.L())
 	if err != nil {
 		return fmt.Errorf("failed to create signature verifier: %w", err)
 	}
@@ -133,7 +133,7 @@ func runPluginInstall(cmd *cobra.Command, args []string) error {
 func runPluginUpdate(cmd *cobra.Command, args []string) error {
 	name := args[0]
 
-	logrus.Infof("Updating plugin %s", name)
+	log.Info("Updating plugin", "name", name)
 
 	// Load configuration
 	loader := config.NewLoader()
@@ -145,7 +145,7 @@ func runPluginUpdate(cmd *cobra.Command, args []string) error {
 	// Set up authentication
 	authProvider := registry.NewAuthProvider()
 	if err := authProvider.LoadDockerConfig(); err != nil {
-		logrus.Warnf("Failed to load Docker config: %v", err)
+		log.Warn("Failed to load Docker config", "error", err)
 	}
 
 	// Create registry client
@@ -163,7 +163,7 @@ func runPluginUpdate(cmd *cobra.Command, args []string) error {
 	installer := plugin.NewInstaller(cfg.Plugins.Dir, registryURL, client)
 
 	// Set up signature verification
-	verifier, err := plugin.NewSignatureVerifier(&cfg.Plugins.Signature)
+	verifier, err := plugin.NewSignatureVerifier(&cfg.Plugins.Signature, log.L())
 	if err != nil {
 		return fmt.Errorf("failed to create signature verifier: %w", err)
 	}
@@ -196,7 +196,7 @@ func runPluginRemove(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	logrus.Infof("Removing plugin %s", name)
+	log.Info("Removing plugin", "name", name)
 
 	// Load configuration
 	loader := config.NewLoader()

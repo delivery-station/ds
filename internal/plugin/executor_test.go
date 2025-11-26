@@ -1,7 +1,6 @@
 package plugin
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -25,13 +24,42 @@ func buildTestPlugin(t *testing.T, dir, name, sourceCode string) string {
 	pluginPath := filepath.Join(dir, pluginName)
 
 	// Create a temporary Go source file
-	srcFile := filepath.Join(dir, name+".go")
+	srcFile := filepath.Join(dir, "main.go")
 	if err := os.WriteFile(srcFile, []byte(sourceCode), 0644); err != nil {
 		t.Fatalf("failed to write plugin source: %v", err)
 	}
 
+	// Initialize module
+	cmdInit := exec.Command("go", "mod", "init", "testplugin")
+	cmdInit.Dir = dir
+	if out, err := cmdInit.CombinedOutput(); err != nil {
+		t.Fatalf("failed to init module: %v\nOutput: %s", err, out)
+	}
+
+	// Get absolute path to ds module
+	// Assuming we are running tests from ds/internal/plugin
+	dsPath, err := filepath.Abs("../../")
+	if err != nil {
+		t.Fatalf("failed to get ds path: %v", err)
+	}
+
+	// Replace ds module
+	cmdReplace := exec.Command("go", "mod", "edit", "-replace", fmt.Sprintf("github.com/delivery-station/ds=%s", dsPath))
+	cmdReplace.Dir = dir
+	if out, err := cmdReplace.CombinedOutput(); err != nil {
+		t.Fatalf("failed to replace module: %v\nOutput: %s", err, out)
+	}
+
+	// Tidy to resolve dependencies
+	cmdTidy := exec.Command("go", "mod", "tidy")
+	cmdTidy.Dir = dir
+	if out, err := cmdTidy.CombinedOutput(); err != nil {
+		t.Fatalf("failed to tidy module: %v\nOutput: %s", err, out)
+	}
+
 	// Build the plugin
-	cmd := exec.Command("go", "build", "-o", pluginPath, srcFile)
+	cmd := exec.Command("go", "build", "-o", pluginPath, ".")
+	cmd.Dir = dir
 	cmd.Env = append(os.Environ(),
 		fmt.Sprintf("GOOS=%s", runtime.GOOS),
 		fmt.Sprintf("GOARCH=%s", runtime.GOARCH),
@@ -137,10 +165,45 @@ func TestExecutePlugin_Success(t *testing.T) {
 	// Create a simple test plugin
 	sourceCode := `package main
 
-import "fmt"
+import (
+	"context"
+	"github.com/delivery-station/ds/pkg/plugin"
+	"github.com/delivery-station/ds/pkg/types"
+	goplugin "github.com/hashicorp/go-plugin"
+)
+
+type TestPlugin struct{}
+
+func (p *TestPlugin) GetMetadata(ctx context.Context) (*types.PluginMetadata, error) {
+	return &types.PluginMetadata{
+		Name:    "testexec",
+		Version: "1.0.0",
+	}, nil
+}
+
+func (p *TestPlugin) Execute(ctx context.Context, operation string, args []string, env map[string]string) (*types.ExecutionResult, error) {
+	return &types.ExecutionResult{
+		Stdout:   "Hello from plugin\n",
+		ExitCode: 0,
+	}, nil
+}
+
+func (p *TestPlugin) ValidateConfig(ctx context.Context, config map[string]interface{}) error {
+	return nil
+}
+
+func (p *TestPlugin) GetSchema(ctx context.Context) (*types.PluginSchema, error) {
+	return &types.PluginSchema{}, nil
+}
 
 func main() {
-	fmt.Println("Hello from plugin")
+	goplugin.Serve(&goplugin.ServeConfig{
+		HandshakeConfig: plugin.Handshake,
+		Plugins: map[string]goplugin.Plugin{
+			"ds-plugin": &plugin.DSPlugin{Impl: &TestPlugin{}},
+		},
+		GRPCServer: goplugin.DefaultGRPCServer,
+	})
 }
 `
 	buildTestPlugin(t, tmpDir, "testexec", sourceCode)
@@ -166,7 +229,7 @@ platform:
 	}
 
 	// Execute plugin
-	exitCode, err := executor.ExecutePlugin("testexec", []string{})
+	exitCode, err := executor.ExecutePlugin("testexec", []string{"run"})
 
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -183,10 +246,44 @@ func TestExecutePlugin_NonZeroExit(t *testing.T) {
 	// Create a plugin that exits with error code
 	sourceCode := `package main
 
-import "os"
+import (
+	"context"
+	"github.com/delivery-station/ds/pkg/plugin"
+	"github.com/delivery-station/ds/pkg/types"
+	goplugin "github.com/hashicorp/go-plugin"
+)
+
+type TestPlugin struct{}
+
+func (p *TestPlugin) GetMetadata(ctx context.Context) (*types.PluginMetadata, error) {
+	return &types.PluginMetadata{
+		Name:    "failplugin",
+		Version: "1.0.0",
+	}, nil
+}
+
+func (p *TestPlugin) Execute(ctx context.Context, operation string, args []string, env map[string]string) (*types.ExecutionResult, error) {
+	return &types.ExecutionResult{
+		ExitCode: 42,
+	}, nil
+}
+
+func (p *TestPlugin) ValidateConfig(ctx context.Context, config map[string]interface{}) error {
+	return nil
+}
+
+func (p *TestPlugin) GetSchema(ctx context.Context) (*types.PluginSchema, error) {
+	return &types.PluginSchema{}, nil
+}
 
 func main() {
-	os.Exit(42)
+	goplugin.Serve(&goplugin.ServeConfig{
+		HandshakeConfig: plugin.Handshake,
+		Plugins: map[string]goplugin.Plugin{
+			"ds-plugin": &plugin.DSPlugin{Impl: &TestPlugin{}},
+		},
+		GRPCServer: goplugin.DefaultGRPCServer,
+	})
 }
 `
 	buildTestPlugin(t, tmpDir, "failplugin", sourceCode)
@@ -210,7 +307,7 @@ platform:
 		t.Fatalf("failed to discover plugins: %v", err)
 	}
 
-	exitCode, err := executor.ExecutePlugin("failplugin", []string{})
+	exitCode, err := executor.ExecutePlugin("failplugin", []string{"run"})
 
 	if err != nil {
 		t.Errorf("unexpected error (should be nil): %v", err)
@@ -228,13 +325,45 @@ func TestExecutePluginWithOutput(t *testing.T) {
 	sourceCode := `package main
 
 import (
-	"fmt"
-	"os"
+	"context"
+	"github.com/delivery-station/ds/pkg/plugin"
+	"github.com/delivery-station/ds/pkg/types"
+	goplugin "github.com/hashicorp/go-plugin"
 )
 
+type TestPlugin struct{}
+
+func (p *TestPlugin) GetMetadata(ctx context.Context) (*types.PluginMetadata, error) {
+	return &types.PluginMetadata{
+		Name:    "outputplugin",
+		Version: "1.0.0",
+	}, nil
+}
+
+func (p *TestPlugin) Execute(ctx context.Context, operation string, args []string, env map[string]string) (*types.ExecutionResult, error) {
+	return &types.ExecutionResult{
+		Stdout:   "stdout message",
+		Stderr:   "stderr message",
+		ExitCode: 0,
+	}, nil
+}
+
+func (p *TestPlugin) ValidateConfig(ctx context.Context, config map[string]interface{}) error {
+	return nil
+}
+
+func (p *TestPlugin) GetSchema(ctx context.Context) (*types.PluginSchema, error) {
+	return &types.PluginSchema{}, nil
+}
+
 func main() {
-	fmt.Println("stdout message")
-	fmt.Fprintln(os.Stderr, "stderr message")
+	goplugin.Serve(&goplugin.ServeConfig{
+		HandshakeConfig: plugin.Handshake,
+		Plugins: map[string]goplugin.Plugin{
+			"ds-plugin": &plugin.DSPlugin{Impl: &TestPlugin{}},
+		},
+		GRPCServer: goplugin.DefaultGRPCServer,
+	})
 }
 `
 	buildTestPlugin(t, tmpDir, "outputplugin", sourceCode)
@@ -258,7 +387,7 @@ platform:
 		t.Fatalf("failed to discover plugins: %v", err)
 	}
 
-	stdout, stderr, exitCode, err := executor.ExecutePluginWithOutput("outputplugin", []string{})
+	stdout, stderr, exitCode, err := executor.ExecutePluginWithOutput("outputplugin", []string{"run"})
 
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -277,57 +406,6 @@ platform:
 	}
 }
 
-func TestStreamPlugin(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	// Create a plugin
-	sourceCode := `package main
-
-import "fmt"
-
-func main() {
-	fmt.Println("streaming output")
-}
-`
-	buildTestPlugin(t, tmpDir, "streamplugin", sourceCode)
-
-	// Create manifest
-	manifestPath := filepath.Join(tmpDir, "ds-streamplugin.yaml")
-	manifest := `name: streamplugin
-version: 1.0.0
-platform:
-  os: [linux, darwin, windows]
-  arch: [amd64, arm64]
-`
-	if err := os.WriteFile(manifestPath, []byte(manifest), 0644); err != nil {
-		t.Fatalf("failed to create manifest: %v", err)
-	}
-
-	mgr := NewManager(tmpDir)
-	executor := NewExecutor(mgr)
-
-	if err := mgr.DiscoverPlugins(); err != nil {
-		t.Fatalf("failed to discover plugins: %v", err)
-	}
-
-	// Capture output
-	var stdout, stderr bytes.Buffer
-
-	exitCode, err := executor.StreamPlugin("streamplugin", []string{}, &stdout, &stderr)
-
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	if exitCode != 0 {
-		t.Errorf("expected exit code 0, got %d", exitCode)
-	}
-
-	if !strings.Contains(stdout.String(), "streaming output") {
-		t.Errorf("expected 'streaming output' in stdout, got: %s", stdout.String())
-	}
-}
-
 func TestExecutePlugin_Timeout(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping timeout test in short mode")
@@ -338,10 +416,46 @@ func TestExecutePlugin_Timeout(t *testing.T) {
 	// Create a plugin that sleeps
 	sourceCode := `package main
 
-import "time"
+import (
+	"context"
+	"time"
+	"github.com/delivery-station/ds/pkg/plugin"
+	"github.com/delivery-station/ds/pkg/types"
+	goplugin "github.com/hashicorp/go-plugin"
+)
+
+type TestPlugin struct{}
+
+func (p *TestPlugin) GetMetadata(ctx context.Context) (*types.PluginMetadata, error) {
+	return &types.PluginMetadata{
+		Name:    "slowplugin",
+		Version: "1.0.0",
+	}, nil
+}
+
+func (p *TestPlugin) Execute(ctx context.Context, operation string, args []string, env map[string]string) (*types.ExecutionResult, error) {
+	time.Sleep(10 * time.Second)
+	return &types.ExecutionResult{
+		ExitCode: 0,
+	}, nil
+}
+
+func (p *TestPlugin) ValidateConfig(ctx context.Context, config map[string]interface{}) error {
+	return nil
+}
+
+func (p *TestPlugin) GetSchema(ctx context.Context) (*types.PluginSchema, error) {
+	return &types.PluginSchema{}, nil
+}
 
 func main() {
-	time.Sleep(10 * time.Second)
+	goplugin.Serve(&goplugin.ServeConfig{
+		HandshakeConfig: plugin.Handshake,
+		Plugins: map[string]goplugin.Plugin{
+			"ds-plugin": &plugin.DSPlugin{Impl: &TestPlugin{}},
+		},
+		GRPCServer: goplugin.DefaultGRPCServer,
+	})
 }
 `
 	buildTestPlugin(t, tmpDir, "slowplugin", sourceCode)
@@ -366,10 +480,11 @@ platform:
 		t.Fatalf("failed to discover plugins: %v", err)
 	}
 
-	exitCode, err := executor.ExecutePlugin("slowplugin", []string{})
+	exitCode, err := executor.ExecutePlugin("slowplugin", []string{"run"})
 
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+	// We expect a timeout error
+	if err == nil {
+		t.Error("expected timeout error, got nil")
 	}
 
 	// Should return timeout exit code

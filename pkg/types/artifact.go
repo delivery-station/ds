@@ -21,8 +21,8 @@ type Layer struct {
 	Metadata  map[string]string `json:"metadata,omitempty"`
 }
 
-// PluginMetadata represents metadata about a plugin
-type PluginMetadata struct {
+// OCIPluginMetadata represents metadata about a plugin
+type OCIPluginMetadata struct {
 	Name        string            `json:"name"`
 	Version     string            `json:"version"`
 	Description string            `json:"description"`

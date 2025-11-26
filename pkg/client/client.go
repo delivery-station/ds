@@ -13,7 +13,7 @@ import (
 	"github.com/delivery-station/ds/internal/plugin"
 	"github.com/delivery-station/ds/internal/registry"
 	"github.com/delivery-station/ds/pkg/types"
-	"github.com/sirupsen/logrus"
+	"github.com/hashicorp/go-hclog"
 )
 
 // Client is the main public API for interacting with the delivery station
@@ -25,7 +25,7 @@ type Client struct {
 	eventBus       *communication.EventBus
 	stateStore     *communication.StateStore
 	pluginRegistry *communication.PluginRegistry
-	logger         *logrus.Logger
+	logger         hclog.Logger
 }
 
 // Option is a functional option for configuring the Client
@@ -34,7 +34,10 @@ type Option func(*Client) error
 // NewClient creates a new delivery station client
 func NewClient(opts ...Option) (*Client, error) {
 	c := &Client{
-		logger: logrus.New(),
+		logger: hclog.New(&hclog.LoggerOptions{
+			Name:  "ds-client",
+			Level: hclog.Info,
+		}),
 	}
 
 	for _, opt := range opts {

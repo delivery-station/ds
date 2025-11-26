@@ -9,13 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/hashicorp/go-hclog"
 )
 
 func TestNewCache(t *testing.T) {
 	tmpDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetOutput(os.Stderr)
+	logger := hclog.NewNullLogger()
 
 	cache, err := NewCache(tmpDir, 1024*1024, time.Hour, logger)
 	if err != nil {
@@ -87,8 +86,7 @@ func TestGenerateKey(t *testing.T) {
 
 func TestCachePutAndGet(t *testing.T) {
 	tmpDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetOutput(os.Stderr)
+	logger := hclog.NewNullLogger()
 
 	cache, err := NewCache(tmpDir, 10*1024*1024, time.Hour, logger)
 	if err != nil {
@@ -150,8 +148,7 @@ func TestCachePutAndGet(t *testing.T) {
 
 func TestCacheGetNotFound(t *testing.T) {
 	tmpDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetOutput(os.Stderr)
+	logger := hclog.NewNullLogger()
 
 	cache, err := NewCache(tmpDir, 10*1024*1024, time.Hour, logger)
 	if err != nil {
@@ -175,8 +172,7 @@ func TestCacheGetNotFound(t *testing.T) {
 
 func TestCacheList(t *testing.T) {
 	tmpDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetOutput(os.Stderr)
+	logger := hclog.NewNullLogger()
 
 	cache, err := NewCache(tmpDir, 10*1024*1024, time.Hour, logger)
 	if err != nil {
@@ -229,8 +225,7 @@ func TestCacheList(t *testing.T) {
 
 func TestCacheRemove(t *testing.T) {
 	tmpDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetOutput(os.Stderr)
+	logger := hclog.NewNullLogger()
 
 	cache, err := NewCache(tmpDir, 10*1024*1024, time.Hour, logger)
 	if err != nil {
@@ -276,8 +271,7 @@ func TestCacheRemove(t *testing.T) {
 
 func TestCacheClean(t *testing.T) {
 	tmpDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetOutput(os.Stderr)
+	logger := hclog.NewNullLogger()
 
 	// Create cache with 1 second TTL
 	cache, err := NewCache(tmpDir, 10*1024*1024, time.Second, logger)
@@ -320,8 +314,7 @@ func TestCacheClean(t *testing.T) {
 
 func TestCacheSize(t *testing.T) {
 	tmpDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetOutput(os.Stderr)
+	logger := hclog.NewNullLogger()
 
 	cache, err := NewCache(tmpDir, 10*1024*1024, time.Hour, logger)
 	if err != nil {
@@ -369,8 +362,7 @@ func TestCacheSize(t *testing.T) {
 
 func TestCacheLRUEviction(t *testing.T) {
 	tmpDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetOutput(os.Stderr)
+	logger := hclog.NewNullLogger()
 
 	// Create cache with small max size (3KB)
 	cache, err := NewCache(tmpDir, 3*1024, 0, logger)
@@ -428,8 +420,7 @@ func TestCacheLRUEviction(t *testing.T) {
 
 func TestCacheTTLExpiration(t *testing.T) {
 	tmpDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetOutput(os.Stderr)
+	logger := hclog.NewNullLogger()
 
 	// Create cache with 500ms TTL
 	cache, err := NewCache(tmpDir, 10*1024*1024, 500*time.Millisecond, logger)
@@ -467,8 +458,7 @@ func TestCacheTTLExpiration(t *testing.T) {
 
 func TestCacheAccessCountIncrement(t *testing.T) {
 	tmpDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetOutput(os.Stderr)
+	logger := hclog.NewNullLogger()
 
 	cache, err := NewCache(tmpDir, 10*1024*1024, time.Hour, logger)
 	if err != nil {

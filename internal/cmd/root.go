@@ -8,7 +8,8 @@ import (
 
 	"github.com/delivery-station/ds/internal/config"
 	"github.com/delivery-station/ds/internal/plugin"
-	"github.com/sirupsen/logrus"
+	"github.com/delivery-station/ds/pkg/log"
+	"github.com/hashicorp/go-hclog"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -91,8 +92,12 @@ func Execute() error {
 					// Try to execute as plugin
 					exitCode, pluginErr := executePlugin(pluginName, pluginArgs)
 					if pluginErr != nil {
-						// Plugin not found or failed - return original error
-						return err
+						// If plugin was not found, return the original "unknown command" error
+						if strings.Contains(pluginErr.Error(), "not found") {
+							return err
+						}
+						// Otherwise, return the plugin execution error
+						return pluginErr
 					}
 
 					// Exit with plugin's exit code
@@ -110,7 +115,7 @@ func executePlugin(pluginName string, args []string) (int, error) {
 	// Initialize config manually (since PersistentPreRunE won't run for unknown commands)
 	if err := initConfig(); err != nil {
 		// Continue anyway with defaults - config errors are non-fatal for plugin execution
-		logrus.WithError(err).Debug("Failed to initialize config, using defaults")
+		log.Debug("Failed to initialize config, using defaults", "error", err)
 	}
 
 	// Manually check for --plugin-dir flag in os.Args
@@ -140,6 +145,9 @@ func executePlugin(pluginName string, args []string) (int, error) {
 
 	// Create plugin manager
 	mgr := plugin.NewManager(cfg.Plugins.Dir)
+	if err := mgr.DiscoverPlugins(); err != nil {
+		return 1, fmt.Errorf("failed to discover plugins: %w", err)
+	}
 
 	// Create executor
 	executor := plugin.NewExecutor(mgr)
@@ -184,22 +192,23 @@ func init() {
 // initConfig reads in config file and ENV variables if set.
 func initConfig() error {
 	// Setup logging
-	level, err := logrus.ParseLevel(logLevel)
-	if err != nil {
-		level = logrus.InfoLevel
+	level := hclog.LevelFromString(logLevel)
+	if level == hclog.NoLevel {
+		level = hclog.Info
 	}
-	logrus.SetLevel(level)
+
+	opts := &hclog.LoggerOptions{
+		Name:   "ds",
+		Output: os.Stderr,
+		Level:  level,
+		Color:  hclog.AutoColor,
+	}
 
 	if noColor {
-		logrus.SetFormatter(&logrus.TextFormatter{
-			DisableColors: true,
-		})
-	} else {
-		logrus.SetFormatter(&logrus.TextFormatter{
-			ForceColors:   true,
-			FullTimestamp: true,
-		})
+		opts.Color = hclog.ColorOff
 	}
+
+	log.SetLogger(hclog.New(opts))
 
 	// Set config file
 	if cfgFile != "" {
@@ -230,9 +239,9 @@ func initConfig() error {
 			return fmt.Errorf("failed to read config file: %w", err)
 		}
 		// Otherwise, just log debug message
-		logrus.Debugf("No config file found: %v", err)
+		log.Debug("No config file found", "error", err)
 	} else {
-		logrus.Debugf("Using config file: %s", viper.ConfigFileUsed())
+		log.Debug("Using config file", "file", viper.ConfigFileUsed())
 	}
 
 	// Set defaults

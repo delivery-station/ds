@@ -6,15 +6,14 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/sirupsen/logrus"
+	"github.com/hashicorp/go-hclog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestNewPluginRegistry(t *testing.T) {
 	tempDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	registry, err := NewPluginRegistry(tempDir, logger)
 	require.NoError(t, err)
@@ -23,8 +22,7 @@ func TestNewPluginRegistry(t *testing.T) {
 
 func TestPluginRegistryRegister(t *testing.T) {
 	tempDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	registry, err := NewPluginRegistry(tempDir, logger)
 	require.NoError(t, err)
@@ -51,8 +49,7 @@ func TestPluginRegistryRegister(t *testing.T) {
 
 func TestPluginRegistryGet(t *testing.T) {
 	tempDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	registry, err := NewPluginRegistry(tempDir, logger)
 	require.NoError(t, err)
@@ -76,8 +73,7 @@ func TestPluginRegistryGet(t *testing.T) {
 
 func TestPluginRegistryGetNotFound(t *testing.T) {
 	tempDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	registry, err := NewPluginRegistry(tempDir, logger)
 	require.NoError(t, err)
@@ -90,8 +86,7 @@ func TestPluginRegistryGetNotFound(t *testing.T) {
 
 func TestPluginRegistryUnregister(t *testing.T) {
 	tempDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	registry, err := NewPluginRegistry(tempDir, logger)
 	require.NoError(t, err)
@@ -117,8 +112,7 @@ func TestPluginRegistryUnregister(t *testing.T) {
 
 func TestPluginRegistryUpdateStatus(t *testing.T) {
 	tempDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	registry, err := NewPluginRegistry(tempDir, logger)
 	require.NoError(t, err)
@@ -145,8 +139,7 @@ func TestPluginRegistryUpdateStatus(t *testing.T) {
 
 func TestPluginRegistryList(t *testing.T) {
 	tempDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	registry, err := NewPluginRegistry(tempDir, logger)
 	require.NoError(t, err)
@@ -171,8 +164,7 @@ func TestPluginRegistryList(t *testing.T) {
 
 func TestPluginRegistryFindByCapability(t *testing.T) {
 	tempDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	registry, err := NewPluginRegistry(tempDir, logger)
 	require.NoError(t, err)
@@ -219,8 +211,7 @@ func TestPluginRegistryFindByCapability(t *testing.T) {
 
 func TestPluginRegistryPersistence(t *testing.T) {
 	tempDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	ctx := context.Background()
 
@@ -249,8 +240,7 @@ func TestPluginRegistryPersistence(t *testing.T) {
 
 func TestPluginRegistryFileStructure(t *testing.T) {
 	tempDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	registry, err := NewPluginRegistry(tempDir, logger)
 	require.NoError(t, err)
@@ -273,8 +263,7 @@ func TestPluginRegistryFileStructure(t *testing.T) {
 
 func TestPluginRegistryEmptyList(t *testing.T) {
 	tempDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	registry, err := NewPluginRegistry(tempDir, logger)
 	require.NoError(t, err)
@@ -286,8 +275,7 @@ func TestPluginRegistryEmptyList(t *testing.T) {
 
 func TestPluginRegistryFindByCapabilityNoMatches(t *testing.T) {
 	tempDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	registry, err := NewPluginRegistry(tempDir, logger)
 	require.NoError(t, err)

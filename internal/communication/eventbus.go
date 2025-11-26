@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/hashicorp/go-hclog"
 )
 
 // EventType represents the type of event
@@ -34,7 +34,7 @@ type EventHandler func(ctx context.Context, event *Event) error
 type EventBus struct {
 	mu          sync.RWMutex
 	subscribers map[EventType][]EventHandler
-	logger      *logrus.Logger
+	logger      hclog.Logger
 	bufferSize  int
 	eventChan   chan *Event
 	done        chan struct{}
@@ -42,9 +42,12 @@ type EventBus struct {
 }
 
 // NewEventBus creates a new event bus
-func NewEventBus(logger *logrus.Logger, bufferSize int) *EventBus {
+func NewEventBus(logger hclog.Logger, bufferSize int) *EventBus {
 	if logger == nil {
-		logger = logrus.New()
+		logger = hclog.New(&hclog.LoggerOptions{
+			Name:  "eventbus",
+			Level: hclog.Info,
+		})
 	}
 	if bufferSize <= 0 {
 		bufferSize = 100
@@ -71,7 +74,7 @@ func (b *EventBus) Subscribe(eventType EventType, handler EventHandler) {
 	defer b.mu.Unlock()
 
 	b.subscribers[eventType] = append(b.subscribers[eventType], handler)
-	b.logger.Debugf("Subscribed handler for event type: %s", eventType)
+	b.logger.Debug("Subscribed handler", "event_type", eventType)
 }
 
 // SubscribeAll registers a handler for all event types
@@ -101,12 +104,12 @@ func (b *EventBus) Publish(ctx context.Context, event *Event) error {
 
 	select {
 	case b.eventChan <- event:
-		b.logger.Debugf("Published event: %s from plugin: %s", event.Type, event.PluginID)
+		b.logger.Debug("Published event", "type", event.Type, "plugin_id", event.PluginID)
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-time.After(5 * time.Second):
-		b.logger.Warnf("Event publish timeout for type: %s", event.Type)
+		b.logger.Warn("Event publish timeout", "type", event.Type)
 		return context.DeadlineExceeded
 	}
 }
@@ -137,7 +140,7 @@ func (b *EventBus) handleEvent(event *Event) {
 	b.mu.RUnlock()
 
 	if len(handlers) == 0 {
-		b.logger.Debugf("No subscribers for event type: %s", event.Type)
+		b.logger.Debug("No subscribers for event type", "type", event.Type)
 		return
 	}
 
@@ -152,10 +155,10 @@ func (b *EventBus) handleEvent(event *Event) {
 		select {
 		case err := <-done:
 			if err != nil {
-				b.logger.Errorf("Event handler failed for type %s: %v", event.Type, err)
+				b.logger.Error("Event handler failed", "type", event.Type, "error", err)
 			}
 		case <-time.After(10 * time.Second):
-			b.logger.Warnf("Event handler timeout for type: %s", event.Type)
+			b.logger.Warn("Event handler timeout", "type", event.Type)
 		}
 	}
 }

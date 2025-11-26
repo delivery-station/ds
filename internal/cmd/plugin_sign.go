@@ -11,7 +11,7 @@ import (
 
 	"github.com/delivery-station/ds/internal/config"
 	"github.com/delivery-station/ds/internal/plugin"
-	"github.com/sirupsen/logrus"
+	"github.com/delivery-station/ds/pkg/log"
 	"github.com/spf13/cobra"
 )
 
@@ -107,7 +107,7 @@ from the configuration.`,
 		}
 
 		// Create signature verifier
-		verifier, err := plugin.NewSignatureVerifier(&cfg.Plugins.Signature)
+		verifier, err := plugin.NewSignatureVerifier(&cfg.Plugins.Signature, log.L())
 		if err != nil {
 			return fmt.Errorf("failed to create verifier: %w", err)
 		}
@@ -144,7 +144,7 @@ func generateKeyPair(privPath, pubPath string, keySize int) error {
 	}
 	defer func() {
 		if err := privFile.Close(); err != nil {
-			logrus.WithError(err).Warn("Failed to close private key file")
+			log.Warn("Failed to close private key file", "error", err)
 		}
 	}()
 
@@ -170,7 +170,7 @@ func generateKeyPair(privPath, pubPath string, keySize int) error {
 	}
 	defer func() {
 		if err := pubFile.Close(); err != nil {
-			logrus.WithError(err).Warn("Failed to close public key file")
+			log.Warn("Failed to close public key file", "error", err)
 		}
 	}()
 

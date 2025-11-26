@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package plugin;
+
+option go_package = "github.com/delivery-station/ds/pkg/plugin";
+
+// DSPlugin service definition
+service DSPlugin {
+  rpc GetMetadata(GetMetadataRequest) returns (GetMetadataResponse);
+  rpc Execute(ExecuteRequest) returns (ExecuteResponse);
+  rpc ValidateConfig(ValidateConfigRequest) returns (ValidateConfigResponse);
+  rpc GetSchema(GetSchemaRequest) returns (GetSchemaResponse);
+}
+
+message GetMetadataRequest {}
+
+message GetMetadataResponse {
+  string name = 1;
+  string version = 2;
+  string description = 3;
+  repeated string operations = 4;
+  Platform platform = 5;
+  map<string, string> config = 6;
+}
+
+message Platform {
+  repeated string os = 1;
+  repeated string arch = 2;
+}
+
+message ExecuteRequest {
+  string operation = 1;
+  repeated string args = 2;
+  map<string, string> env = 3;
+}
+
+message ExecuteResponse {
+  string stdout = 1;
+  string stderr = 2;
+  int32 exit_code = 3;
+  string error = 4;
+}
+
+message ValidateConfigRequest {
+  map<string, string> config = 1;
+}
+
+message ValidateConfigResponse {
+  bool valid = 1;
+  string error = 2;
+}
+
+message GetSchemaRequest {}
+
+message GetSchemaResponse {
+  string version = 1;
+  map<string, SchemaProperty> properties = 2;
+}
+
+message SchemaProperty {
+  string type = 1;
+  string description = 2;
+  bool required = 3;
+  string default = 4;
+}

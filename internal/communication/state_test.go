@@ -7,15 +7,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/hashicorp/go-hclog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestNewStateStore(t *testing.T) {
 	tempDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	store, err := NewStateStore(tempDir, logger)
 	require.NoError(t, err)
@@ -25,8 +24,7 @@ func TestNewStateStore(t *testing.T) {
 
 func TestStateStoreSetAndGet(t *testing.T) {
 	tempDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	store, err := NewStateStore(tempDir, logger)
 	require.NoError(t, err)
@@ -54,8 +52,7 @@ func TestStateStoreSetAndGet(t *testing.T) {
 
 func TestStateStoreGetNotFound(t *testing.T) {
 	tempDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	store, err := NewStateStore(tempDir, logger)
 	require.NoError(t, err)
@@ -67,8 +64,7 @@ func TestStateStoreGetNotFound(t *testing.T) {
 
 func TestStateStoreUpdate(t *testing.T) {
 	tempDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	store, err := NewStateStore(tempDir, logger)
 	require.NoError(t, err)
@@ -92,8 +88,7 @@ func TestStateStoreUpdate(t *testing.T) {
 
 func TestStateStoreDelete(t *testing.T) {
 	tempDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	store, err := NewStateStore(tempDir, logger)
 	require.NoError(t, err)
@@ -116,8 +111,7 @@ func TestStateStoreDelete(t *testing.T) {
 
 func TestStateStoreList(t *testing.T) {
 	tempDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	store, err := NewStateStore(tempDir, logger)
 	require.NoError(t, err)
@@ -137,8 +131,7 @@ func TestStateStoreList(t *testing.T) {
 
 func TestStateStoreListByPlugin(t *testing.T) {
 	tempDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	store, err := NewStateStore(tempDir, logger)
 	require.NoError(t, err)
@@ -164,8 +157,7 @@ func TestStateStoreListByPlugin(t *testing.T) {
 
 func TestStateStoreTTL(t *testing.T) {
 	tempDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	store, err := NewStateStore(tempDir, logger)
 	require.NoError(t, err)
@@ -192,8 +184,7 @@ func TestStateStoreTTL(t *testing.T) {
 
 func TestStateStoreClean(t *testing.T) {
 	tempDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	store, err := NewStateStore(tempDir, logger)
 	require.NoError(t, err)
@@ -222,8 +213,7 @@ func TestStateStoreClean(t *testing.T) {
 
 func TestStateStorePersistence(t *testing.T) {
 	tempDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	ctx := context.Background()
 	key := "test-key"
@@ -248,8 +238,7 @@ func TestStateStorePersistence(t *testing.T) {
 
 func TestStateStoreAccessTracking(t *testing.T) {
 	tempDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	store, err := NewStateStore(tempDir, logger)
 	require.NoError(t, err)
@@ -271,8 +260,7 @@ func TestStateStoreAccessTracking(t *testing.T) {
 
 func TestStateStoreFileStructure(t *testing.T) {
 	tempDir := t.TempDir()
-	logger := logrus.New()
-	logger.SetLevel(logrus.FatalLevel)
+	logger := hclog.NewNullLogger()
 
 	store, err := NewStateStore(tempDir, logger)
 	require.NoError(t, err)

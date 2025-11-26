@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/sirupsen/logrus"
+	"github.com/hashicorp/go-hclog"
 )
 
 // Store provides persistent storage for cache metadata
@@ -15,13 +15,16 @@ type Store struct {
 	path    string
 	entries map[string]*CacheEntry
 	mu      sync.RWMutex
-	logger  *logrus.Logger
+	logger  hclog.Logger
 }
 
 // NewStore creates a new cache store
-func NewStore(path string, logger *logrus.Logger) (*Store, error) {
+func NewStore(path string, logger hclog.Logger) (*Store, error) {
 	if logger == nil {
-		logger = logrus.New()
+		logger = hclog.New(&hclog.LoggerOptions{
+			Name:  "cache-store",
+			Level: hclog.Info,
+		})
 	}
 
 	// Ensure directory exists
@@ -38,7 +41,7 @@ func NewStore(path string, logger *logrus.Logger) (*Store, error) {
 
 	// Load existing entries
 	if err := store.load(); err != nil {
-		logger.WithError(err).Warn("Failed to load cache store, starting fresh")
+		logger.Warn("Failed to load cache store, starting fresh", "error", err)
 	}
 
 	return store, nil
@@ -123,7 +126,7 @@ func (s *Store) Close() error {
 func (s *Store) load() error {
 	// Check if file exists
 	if _, err := os.Stat(s.path); os.IsNotExist(err) {
-		s.logger.WithField("path", s.path).Debug("Cache store file not found, starting fresh")
+		s.logger.Debug("Cache store file not found, starting fresh", "path", s.path)
 		return nil
 	}
 
@@ -145,10 +148,7 @@ func (s *Store) load() error {
 		s.entries[entry.Key] = entry
 	}
 
-	s.logger.WithFields(logrus.Fields{
-		"path":  s.path,
-		"count": len(s.entries),
-	}).Debug("Loaded cache store")
+	s.logger.Debug("Loaded cache store", "path", s.path, "count", len(s.entries))
 
 	return nil
 }
@@ -178,10 +178,7 @@ func (s *Store) save() error {
 		return fmt.Errorf("failed to rename store file: %w", err)
 	}
 
-	s.logger.WithFields(logrus.Fields{
-		"path":  s.path,
-		"count": len(s.entries),
-	}).Debug("Saved cache store")
+	s.logger.Debug("Saved cache store", "path", s.path, "count", len(s.entries))
 
 	return nil
 }

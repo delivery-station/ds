@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/sirupsen/logrus"
+	"github.com/delivery-station/ds/pkg/log"
 )
 
 // DockerConfig represents the Docker config.json structure
@@ -50,7 +50,7 @@ func (a *AuthProvider) LoadDockerConfig() error {
 
 	// Check if file exists
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		logrus.Debug("Docker config.json not found, skipping")
+		log.Debug("Docker config.json not found, skipping")
 		return nil
 	}
 
@@ -67,7 +67,7 @@ func (a *AuthProvider) LoadDockerConfig() error {
 	}
 
 	a.dockerConfig = &config
-	logrus.Debugf("Loaded Docker config with %d registries", len(config.Auths))
+	log.Debug("Loaded Docker config", "registries", len(config.Auths))
 
 	return nil
 }
@@ -77,7 +77,7 @@ func (a *AuthProvider) LoadCredentials(creds []Credentials) {
 	for _, cred := range creds {
 		a.credentials[normalizeRegistry(cred.Registry)] = &cred
 	}
-	logrus.Debugf("Loaded %d credentials from config", len(creds))
+	log.Debug("Loaded credentials from config", "count", len(creds))
 }
 
 // GetCredentials returns credentials for a specific registry
@@ -86,7 +86,7 @@ func (a *AuthProvider) GetCredentials(registry string) (*Credentials, error) {
 
 	// Check explicit credentials first
 	if cred, ok := a.credentials[normalized]; ok {
-		logrus.Debugf("Using explicit credentials for %s", registry)
+		log.Debug("Using explicit credentials", "registry", registry)
 		return cred, nil
 	}
 
@@ -107,14 +107,14 @@ func (a *AuthProvider) GetCredentials(registry string) (*Credentials, error) {
 			}
 
 			if cred.Token != "" || cred.Username != "" {
-				logrus.Debugf("Using Docker config credentials for %s", registry)
+				log.Debug("Using Docker config credentials", "registry", registry)
 				return cred, nil
 			}
 		}
 	}
 
 	// No credentials found
-	logrus.Debugf("No credentials found for %s", registry)
+	log.Debug("No credentials found", "registry", registry)
 	return nil, nil
 }
 
@@ -147,6 +147,6 @@ func normalizeRegistry(registry string) string {
 // RefreshToken refreshes an expired token (placeholder for future implementation)
 func (a *AuthProvider) RefreshToken(ctx context.Context, registry string) error {
 	// TODO: Implement OAuth2 token refresh
-	logrus.Debugf("Token refresh not yet implemented for %s", registry)
+	log.Debug("Token refresh not yet implemented", "registry", registry)
 	return nil
 }

@@ -12,8 +12,8 @@ import (
 	"strings"
 
 	"github.com/delivery-station/ds/internal/registry"
+	"github.com/delivery-station/ds/pkg/log"
 	"github.com/delivery-station/ds/pkg/types"
-	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 )
 
@@ -42,11 +42,11 @@ func (i *Installer) SetSignatureVerifier(verifier *SignatureVerifier) {
 
 // InstallPlugin downloads and installs a plugin from the registry
 func (i *Installer) InstallPlugin(ctx context.Context, name, version string) error {
-	logrus.Infof("Installing plugin %s@%s", name, version)
+	log.Info("Installing plugin", "name", name, "version", version)
 
 	// Resolve platform
 	platform := ResolvePlatform()
-	logrus.Debugf("Resolved platform: %s", platform)
+	log.Debug("Resolved platform", "platform", platform)
 
 	// Construct reference
 	ref := fmt.Sprintf("%s:%s", name, version)
@@ -96,7 +96,7 @@ func (i *Installer) InstallPlugin(ctx context.Context, name, version string) err
 		if err := verifyChecksum(tmpBinary, manifest.Checksum); err != nil {
 			return fmt.Errorf("checksum verification failed: %w", err)
 		}
-		logrus.Debug("Checksum verified")
+		log.Debug("Checksum verified")
 	}
 
 	// Ensure plugin directory exists
@@ -118,11 +118,11 @@ func (i *Installer) InstallPlugin(ctx context.Context, name, version string) err
 	// Download and install signature if available
 	sigPath := tmpBinary + ".sig"
 	if err := i.downloadSignature(ctx, ref, sigPath, platform); err != nil {
-		logrus.Debugf("No signature found for plugin: %v", err)
+		log.Debug("No signature found for plugin", "error", err)
 	} else {
 		destSig := destBinary + ".sig"
 		if err := copyFile(sigPath, destSig); err != nil {
-			logrus.Warnf("Failed to install signature: %v", err)
+			log.Warn("Failed to install signature", "error", err)
 		}
 	}
 
@@ -142,20 +142,20 @@ func (i *Installer) InstallPlugin(ctx context.Context, name, version string) err
 		return fmt.Errorf("failed to install manifest: %w", err)
 	}
 
-	logrus.Infof("Successfully installed %s@%s", name, manifest.Version)
+	log.Info("Successfully installed plugin", "name", name, "version", manifest.Version)
 	return nil
 }
 
 // UpdatePlugin updates a plugin to the latest version
 func (i *Installer) UpdatePlugin(ctx context.Context, name string) error {
-	logrus.Infof("Updating plugin %s", name)
+	log.Info("Updating plugin", "name", name)
 
 	// Check current version
 	currentManifest := filepath.Join(i.pluginDir, name+".yaml")
 	var currentVersion string
 	if manifest, err := loadPluginManifest(currentManifest); err == nil {
 		currentVersion = manifest.Version
-		logrus.Debugf("Current version: %s", currentVersion)
+		log.Debug("Current version", "version", currentVersion)
 	}
 
 	// Get available versions
@@ -176,14 +176,14 @@ func (i *Installer) UpdatePlugin(ctx context.Context, name string) error {
 
 	// Check if already at latest
 	if currentVersion == latestVersion {
-		logrus.Infof("Plugin %s is already at latest version (%s)", name, currentVersion)
+		log.Info("Plugin is already at latest version", "name", name, "version", currentVersion)
 		return nil
 	}
 
 	// Backup current version (optional)
 	if currentVersion != "" {
 		if err := i.backupPlugin(name); err != nil {
-			logrus.Warnf("Failed to backup plugin: %v", err)
+			log.Warn("Failed to backup plugin", "error", err)
 		}
 	}
 
@@ -193,7 +193,7 @@ func (i *Installer) UpdatePlugin(ctx context.Context, name string) error {
 
 // RemovePlugin removes a plugin from the plugin directory
 func (i *Installer) RemovePlugin(ctx context.Context, name string) error {
-	logrus.Infof("Removing plugin %s", name)
+	log.Info("Removing plugin", "name", name)
 
 	// Remove binary
 	binaryName := name
@@ -212,13 +212,13 @@ func (i *Installer) RemovePlugin(ctx context.Context, name string) error {
 		return fmt.Errorf("failed to remove manifest: %w", err)
 	}
 
-	logrus.Infof("Successfully removed plugin %s", name)
+	log.Info("Successfully removed plugin", "name", name)
 	return nil
 }
 
 // GetAvailableVersions lists available versions for a plugin in the registry
 func (i *Installer) GetAvailableVersions(ctx context.Context, name string) ([]string, error) {
-	logrus.Debugf("Fetching available versions for %s", name)
+	log.Debug("Fetching available versions", "name", name)
 
 	versions, err := i.client.List(ctx, name)
 	if err != nil {
@@ -235,7 +235,7 @@ func ResolvePlatform() string {
 
 // downloadManifest downloads the plugin manifest from the registry
 func (i *Installer) downloadManifest(ctx context.Context, ref, destPath string) error {
-	logrus.Debugf("Downloading manifest for %s", ref)
+	log.Debug("Downloading manifest", "reference", ref)
 
 	// Create destination file
 	file, err := os.Create(destPath)
@@ -244,7 +244,7 @@ func (i *Installer) downloadManifest(ctx context.Context, ref, destPath string) 
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			logrus.WithError(err).Warn("Failed to close manifest file")
+			log.Warn("Failed to close manifest file", "error", err)
 		}
 	}()
 
@@ -265,7 +265,7 @@ func (i *Installer) downloadManifest(ctx context.Context, ref, destPath string) 
 
 // downloadBinary downloads the plugin binary from the registry
 func (i *Installer) downloadBinary(ctx context.Context, ref, destPath, platform string) error {
-	logrus.Debugf("Downloading binary for %s (%s)", ref, platform)
+	log.Debug("Downloading binary", "reference", ref, "platform", platform)
 
 	// Create destination file
 	file, err := os.Create(destPath)
@@ -274,7 +274,7 @@ func (i *Installer) downloadBinary(ctx context.Context, ref, destPath, platform 
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			logrus.WithError(err).Warn("Failed to close binary file")
+			log.Warn("Failed to close binary file", "error", err)
 		}
 	}()
 
@@ -291,7 +291,7 @@ func (i *Installer) downloadBinary(ctx context.Context, ref, destPath, platform 
 
 // downloadSignature downloads the plugin signature from the registry
 func (i *Installer) downloadSignature(ctx context.Context, ref, destPath, platform string) error {
-	logrus.Debugf("Downloading signature for %s (%s)", ref, platform)
+	log.Debug("Downloading signature", "reference", ref, "platform", platform)
 
 	// Create destination file
 	file, err := os.Create(destPath)
@@ -300,7 +300,7 @@ func (i *Installer) downloadSignature(ctx context.Context, ref, destPath, platfo
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			logrus.WithError(err).Warn("Failed to close signature file")
+			log.Warn("Failed to close signature file", "error", err)
 		}
 	}()
 
@@ -323,7 +323,7 @@ func verifyChecksum(path, expectedChecksum string) error {
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			logrus.WithError(err).Warn("Failed to close file for checksum verification")
+			log.Warn("Failed to close file for checksum verification", "error", err)
 		}
 	}()
 
@@ -348,7 +348,7 @@ func copyFile(src, dst string) error {
 	}
 	defer func() {
 		if err := sourceFile.Close(); err != nil {
-			logrus.WithError(err).Warn("Failed to close source file")
+			log.Warn("Failed to close source file", "error", err)
 		}
 	}()
 
@@ -358,7 +358,7 @@ func copyFile(src, dst string) error {
 	}
 	defer func() {
 		if err := destFile.Close(); err != nil {
-			logrus.WithError(err).Warn("Failed to close destination file")
+			log.Warn("Failed to close destination file", "error", err)
 		}
 	}()
 

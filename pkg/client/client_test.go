@@ -13,7 +13,7 @@ import (
 	"github.com/delivery-station/ds/internal/plugin"
 	"github.com/delivery-station/ds/internal/registry"
 	"github.com/delivery-station/ds/pkg/types"
-	"github.com/sirupsen/logrus"
+	"github.com/hashicorp/go-hclog"
 )
 
 func TestNewClient(t *testing.T) {
@@ -94,7 +94,7 @@ func TestNewClient_WithConfig(t *testing.T) {
 
 func TestNewClient_WithCache(t *testing.T) {
 	tmpDir := t.TempDir()
-	logger := logrus.New()
+	logger := hclog.New(&hclog.LoggerOptions{Name: "test", Level: hclog.Debug})
 	customCache, err := cache.NewCache(
 		filepath.Join(tmpDir, "cache"),
 		1024*1024*100, // 100MB

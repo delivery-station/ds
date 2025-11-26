@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/delivery-station/ds/pkg/log"
 	"github.com/delivery-station/ds/pkg/types"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
 
@@ -126,13 +126,13 @@ func (l *Loader) LoadFromFile() error {
 	if err := l.viper.ReadInConfig(); err != nil {
 		// Only return error if config file was explicitly specified
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			logrus.Debug("No config file found, using defaults and environment variables")
+			log.Debug("No config file found, using defaults and environment variables")
 			return nil
 		}
 		return err
 	}
 
-	logrus.Debugf("Loaded config from: %s", l.viper.ConfigFileUsed())
+	log.Debug("Loaded config", "file", l.viper.ConfigFileUsed())
 	return nil
 }
 

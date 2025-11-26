@@ -7,8 +7,8 @@ import (
 
 	"github.com/delivery-station/ds/internal/config"
 	"github.com/delivery-station/ds/internal/plugin"
+	"github.com/delivery-station/ds/pkg/log"
 	"github.com/delivery-station/ds/pkg/types"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
@@ -145,7 +145,7 @@ func displayPluginsTable(plugins []*types.PluginInfo) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
 	defer func() {
 		if err := w.Flush(); err != nil {
-			logrus.WithError(err).Warn("Failed to flush output")
+			log.Warn("Failed to flush output", "error", err)
 		}
 	}()
 

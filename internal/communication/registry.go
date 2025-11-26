@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/sirupsen/logrus"
+	"github.com/hashicorp/go-hclog"
 )
 
 // PluginInfo represents information about a registered plugin
@@ -36,13 +36,16 @@ type PluginRegistry struct {
 	mu       sync.RWMutex
 	plugins  map[string]*PluginInfo
 	storeDir string
-	logger   *logrus.Logger
+	logger   hclog.Logger
 }
 
 // NewPluginRegistry creates a new plugin registry
-func NewPluginRegistry(storeDir string, logger *logrus.Logger) (*PluginRegistry, error) {
+func NewPluginRegistry(storeDir string, logger hclog.Logger) (*PluginRegistry, error) {
 	if logger == nil {
-		logger = logrus.New()
+		logger = hclog.New(&hclog.LoggerOptions{
+			Name:  "plugin-registry",
+			Level: hclog.Info,
+		})
 	}
 
 	// Create store directory
@@ -58,7 +61,7 @@ func NewPluginRegistry(storeDir string, logger *logrus.Logger) (*PluginRegistry,
 
 	// Load existing registry
 	if err := registry.load(); err != nil {
-		logger.Warnf("Failed to load existing registry: %v", err)
+		logger.Warn("Failed to load existing registry", "error", err)
 	}
 
 	return registry, nil
@@ -74,7 +77,7 @@ func (r *PluginRegistry) Register(ctx context.Context, info *PluginInfo) error {
 	}
 
 	r.plugins[info.ID] = info
-	r.logger.Infof("Registered plugin: %s (%s)", info.Name, info.ID)
+	r.logger.Info("Registered plugin", "name", info.Name, "id", info.ID)
 
 	// Persist to disk
 	if err := r.save(); err != nil {
@@ -94,7 +97,7 @@ func (r *PluginRegistry) Unregister(ctx context.Context, pluginID string) error 
 	}
 
 	delete(r.plugins, pluginID)
-	r.logger.Infof("Unregistered plugin: %s", pluginID)
+	r.logger.Info("Unregistered plugin", "id", pluginID)
 
 	// Persist to disk
 	if err := r.save(); err != nil {
@@ -115,7 +118,7 @@ func (r *PluginRegistry) UpdateStatus(ctx context.Context, pluginID string, stat
 	}
 
 	plugin.Status = status
-	r.logger.Debugf("Updated plugin %s status to: %s", pluginID, status)
+	r.logger.Debug("Updated plugin status", "id", pluginID, "status", status)
 
 	// Persist to disk
 	if err := r.save(); err != nil {
@@ -190,7 +193,7 @@ func (r *PluginRegistry) load() error {
 		r.plugins[plugin.ID] = plugin
 	}
 
-	r.logger.Debugf("Loaded %d plugins from registry", len(plugins))
+	r.logger.Debug("Loaded plugins from registry", "count", len(plugins))
 	return nil
 }
 

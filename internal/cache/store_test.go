@@ -1,19 +1,17 @@
 package cache
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/hashicorp/go-hclog"
 )
 
 func TestNewStore(t *testing.T) {
 	tmpDir := t.TempDir()
 	storePath := filepath.Join(tmpDir, "cache.db")
-	logger := logrus.New()
-	logger.SetOutput(os.Stderr)
+	logger := hclog.NewNullLogger()
 
 	store, err := NewStore(storePath, logger)
 	if err != nil {
@@ -33,8 +31,7 @@ func TestNewStore(t *testing.T) {
 func TestStorePutAndGet(t *testing.T) {
 	tmpDir := t.TempDir()
 	storePath := filepath.Join(tmpDir, "cache.db")
-	logger := logrus.New()
-	logger.SetOutput(os.Stderr)
+	logger := hclog.NewNullLogger()
 
 	store, err := NewStore(storePath, logger)
 	if err != nil {
@@ -85,8 +82,7 @@ func TestStorePutAndGet(t *testing.T) {
 func TestStoreGetNotFound(t *testing.T) {
 	tmpDir := t.TempDir()
 	storePath := filepath.Join(tmpDir, "cache.db")
-	logger := logrus.New()
-	logger.SetOutput(os.Stderr)
+	logger := hclog.NewNullLogger()
 
 	store, err := NewStore(storePath, logger)
 	if err != nil {
@@ -108,8 +104,7 @@ func TestStoreGetNotFound(t *testing.T) {
 func TestStoreUpdate(t *testing.T) {
 	tmpDir := t.TempDir()
 	storePath := filepath.Join(tmpDir, "cache.db")
-	logger := logrus.New()
-	logger.SetOutput(os.Stderr)
+	logger := hclog.NewNullLogger()
 
 	store, err := NewStore(storePath, logger)
 	if err != nil {
@@ -159,8 +154,7 @@ func TestStoreUpdate(t *testing.T) {
 func TestStoreDelete(t *testing.T) {
 	tmpDir := t.TempDir()
 	storePath := filepath.Join(tmpDir, "cache.db")
-	logger := logrus.New()
-	logger.SetOutput(os.Stderr)
+	logger := hclog.NewNullLogger()
 
 	store, err := NewStore(storePath, logger)
 	if err != nil {
@@ -207,8 +201,7 @@ func TestStoreDelete(t *testing.T) {
 func TestStoreList(t *testing.T) {
 	tmpDir := t.TempDir()
 	storePath := filepath.Join(tmpDir, "cache.db")
-	logger := logrus.New()
-	logger.SetOutput(os.Stderr)
+	logger := hclog.NewNullLogger()
 
 	store, err := NewStore(storePath, logger)
 	if err != nil {
@@ -284,8 +277,7 @@ func TestStoreList(t *testing.T) {
 func TestStorePersistence(t *testing.T) {
 	tmpDir := t.TempDir()
 	storePath := filepath.Join(tmpDir, "cache.db")
-	logger := logrus.New()
-	logger.SetOutput(os.Stderr)
+	logger := hclog.NewNullLogger()
 
 	// Create store and add entry
 	store1, err := NewStore(storePath, logger)
@@ -342,8 +334,7 @@ func TestStorePersistence(t *testing.T) {
 func TestStoreEmptyList(t *testing.T) {
 	tmpDir := t.TempDir()
 	storePath := filepath.Join(tmpDir, "cache.db")
-	logger := logrus.New()
-	logger.SetOutput(os.Stderr)
+	logger := hclog.NewNullLogger()
 
 	store, err := NewStore(storePath, logger)
 	if err != nil {

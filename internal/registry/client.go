@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/delivery-station/ds/pkg/log"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/registry/remote"
 	"oras.land/oras-go/v2/registry/remote/auth"
@@ -46,7 +46,7 @@ func WithProxy(proxyURL string) ClientOption {
 		if proxyURL != "" {
 			proxy, err := url.Parse(proxyURL)
 			if err != nil {
-				logrus.Warnf("Invalid proxy URL: %v", err)
+				log.Warn("Invalid proxy URL", "error", err)
 				return
 			}
 
@@ -82,7 +82,7 @@ func NewClient(registry string, authProvider *AuthProvider, opts ...ClientOption
 
 // Pull downloads an OCI artifact from the registry
 func (c *Client) Pull(ctx context.Context, reference string, dest io.Writer) error {
-	logrus.Infof("Pulling %s from %s", reference, c.registry)
+	log.Info("Pulling artifact", "reference", reference, "registry", c.registry)
 
 	// Create repository
 	repo, err := c.createRepository(reference)
@@ -103,7 +103,7 @@ func (c *Client) Pull(ctx context.Context, reference string, dest io.Writer) err
 		return fmt.Errorf("failed to resolve reference: %w", err)
 	}
 
-	logrus.Debugf("Resolved manifest: %s (size: %d bytes)", manifestDesc.Digest, manifestDesc.Size)
+	log.Debug("Resolved manifest", "digest", manifestDesc.Digest, "size", manifestDesc.Size)
 
 	// Fetch manifest
 	manifestReader, err := repo.Fetch(ctx, manifestDesc)
@@ -112,7 +112,7 @@ func (c *Client) Pull(ctx context.Context, reference string, dest io.Writer) err
 	}
 	defer func() {
 		if err := manifestReader.Close(); err != nil {
-			logrus.WithError(err).Warn("Failed to close manifest reader")
+			log.Warn("Failed to close manifest reader", "error", err)
 		}
 	}()
 
@@ -122,13 +122,13 @@ func (c *Client) Pull(ctx context.Context, reference string, dest io.Writer) err
 		return fmt.Errorf("failed to copy artifact: %w", err)
 	}
 
-	logrus.Info("Pull completed successfully")
+	log.Info("Pull completed successfully")
 	return nil
 }
 
 // Push uploads an OCI artifact to the registry
 func (c *Client) Push(ctx context.Context, reference string, content io.Reader, contentType string) error {
-	logrus.Infof("Pushing %s to %s", reference, c.registry)
+	log.Info("Pushing artifact", "reference", reference, "registry", c.registry)
 
 	// Create repository
 	repo, err := c.createRepository(reference)
@@ -161,13 +161,13 @@ func (c *Client) Push(ctx context.Context, reference string, content io.Reader, 
 		return fmt.Errorf("failed to tag artifact: %w", err)
 	}
 
-	logrus.Info("Push completed successfully")
+	log.Info("Push completed successfully")
 	return nil
 }
 
 // List returns available versions/tags for a repository
 func (c *Client) List(ctx context.Context, repository string) ([]string, error) {
-	logrus.Debugf("Listing tags for %s", repository)
+	log.Debug("Listing tags", "repository", repository)
 
 	// Create repository
 	repo, err := c.createRepository(repository)
@@ -186,13 +186,13 @@ func (c *Client) List(ctx context.Context, repository string) ([]string, error) 
 		return nil, fmt.Errorf("failed to list tags: %w", err)
 	}
 
-	logrus.Debugf("Found %d tags", len(tags))
+	log.Debug("Found tags", "count", len(tags))
 	return tags, nil
 }
 
 // GetManifest fetches the manifest for an artifact
 func (c *Client) GetManifest(ctx context.Context, reference string) ([]byte, error) {
-	logrus.Debugf("Fetching manifest for %s", reference)
+	log.Debug("Fetching manifest", "reference", reference)
 
 	// Create repository
 	repo, err := c.createRepository(reference)
@@ -220,7 +220,7 @@ func (c *Client) GetManifest(ctx context.Context, reference string) ([]byte, err
 	}
 	defer func() {
 		if err := manifestReader.Close(); err != nil {
-			logrus.WithError(err).Warn("Failed to close manifest reader")
+			log.Warn("Failed to close manifest reader", "error", err)
 		}
 	}()
 
@@ -259,7 +259,7 @@ func (c *Client) createRepository(reference string) (*remote.Repository, error) 
 		var authErr error
 		creds, authErr = c.authProvider.GetCredentials(c.registry)
 		if authErr != nil {
-			logrus.Warnf("Failed to get credentials: %v", authErr)
+			log.Warn("Failed to get credentials", "error", authErr)
 		}
 	}
 

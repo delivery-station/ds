@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/hashicorp/go-hclog"
 )
 
 var (
@@ -35,13 +35,16 @@ type StateStore struct {
 	mu       sync.RWMutex
 	states   map[string]*StateEntry
 	storeDir string
-	logger   *logrus.Logger
+	logger   hclog.Logger
 }
 
 // NewStateStore creates a new state store
-func NewStateStore(storeDir string, logger *logrus.Logger) (*StateStore, error) {
+func NewStateStore(storeDir string, logger hclog.Logger) (*StateStore, error) {
 	if logger == nil {
-		logger = logrus.New()
+		logger = hclog.New(&hclog.LoggerOptions{
+			Name:  "state-store",
+			Level: hclog.Info,
+		})
 	}
 
 	// Create store directory
@@ -57,7 +60,7 @@ func NewStateStore(storeDir string, logger *logrus.Logger) (*StateStore, error) 
 
 	// Load existing state
 	if err := store.load(); err != nil {
-		logger.Warnf("Failed to load existing state: %v", err)
+		logger.Warn("Failed to load existing state", "error", err)
 	}
 
 	return store, nil
@@ -80,7 +83,7 @@ func (s *StateStore) Set(ctx context.Context, key string, value map[string]inter
 		entry.Value = value
 		entry.UpdatedAt = now
 		entry.ExpiresAt = expiresAt
-		s.logger.Debugf("Updated state key: %s by plugin: %s", key, pluginID)
+		s.logger.Debug("Updated state", "key", key, "plugin_id", pluginID)
 	} else {
 		entry = &StateEntry{
 			Key:        key,
@@ -92,7 +95,7 @@ func (s *StateStore) Set(ctx context.Context, key string, value map[string]inter
 			AccessedAt: now,
 		}
 		s.states[key] = entry
-		s.logger.Debugf("Created state key: %s by plugin: %s", key, pluginID)
+		s.logger.Debug("Created state", "key", key, "plugin_id", pluginID)
 	}
 
 	// Persist to disk
@@ -137,7 +140,7 @@ func (s *StateStore) Delete(ctx context.Context, key string) error {
 	}
 
 	delete(s.states, key)
-	s.logger.Debugf("Deleted state key: %s", key)
+	s.logger.Debug("Deleted state", "key", key)
 
 	// Persist to disk
 	if err := s.save(); err != nil {
@@ -199,7 +202,7 @@ func (s *StateStore) Clean(ctx context.Context) (int, error) {
 		if entry.ExpiresAt != nil && now.After(*entry.ExpiresAt) {
 			delete(s.states, key)
 			removed++
-			s.logger.Debugf("Cleaned expired state key: %s", key)
+			s.logger.Debug("Cleaned expired state", "key", key)
 		}
 	}
 
@@ -233,7 +236,7 @@ func (s *StateStore) load() error {
 		s.states[entry.Key] = entry
 	}
 
-	s.logger.Debugf("Loaded %d state entries from disk", len(entries))
+	s.logger.Debug("Loaded state entries from disk", "count", len(entries))
 	return nil
 }
 
