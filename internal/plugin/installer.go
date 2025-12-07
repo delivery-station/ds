@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/delivery-station/ds/internal/registry"
 	"github.com/delivery-station/ds/pkg/log"
 	"github.com/delivery-station/ds/pkg/types"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"gopkg.in/yaml.v3"
 )
 
@@ -64,7 +66,7 @@ func (i *Installer) InstallPlugin(ctx context.Context, name, version string) err
 	}()
 
 	// Download plugin manifest
-	manifestPath := filepath.Join(tmpDir, "plugin.yaml")
+	manifestPath := filepath.Join(tmpDir, "plugin.json")
 	if err := i.downloadManifest(ctx, ref, manifestPath); err != nil {
 		return fmt.Errorf("failed to download manifest: %w", err)
 	}
@@ -80,8 +82,9 @@ func (i *Installer) InstallPlugin(ctx context.Context, name, version string) err
 		return fmt.Errorf("plugin not compatible with %s/%s", runtime.GOOS, runtime.GOARCH)
 	}
 
-	// Download plugin binary
-	binaryName := name
+	// Determine binary name and manifest identifier
+	binaryBase := filepath.Base(name)
+	binaryName := binaryBase
 	if runtime.GOOS == "windows" {
 		binaryName += ".exe"
 	}
@@ -136,8 +139,8 @@ func (i *Installer) InstallPlugin(ctx context.Context, name, version string) err
 		}
 	}
 
-	// Install manifest
-	destManifest := filepath.Join(i.pluginDir, name+".yaml")
+	// Install manifest with a .json extension to match the OCI index content
+	destManifest := filepath.Join(i.pluginDir, binaryBase+".json")
 	if err := copyFile(manifestPath, destManifest); err != nil {
 		return fmt.Errorf("failed to install manifest: %w", err)
 	}
@@ -151,9 +154,10 @@ func (i *Installer) UpdatePlugin(ctx context.Context, name string) error {
 	log.Info("Updating plugin", "name", name)
 
 	// Check current version
-	currentManifest := filepath.Join(i.pluginDir, name+".yaml")
+	manifestName := filepath.Base(name) + ".json"
+	jsonManifest := filepath.Join(i.pluginDir, manifestName)
 	var currentVersion string
-	if manifest, err := loadPluginManifest(currentManifest); err == nil {
+	if manifest, err := loadPluginManifest(jsonManifest); err == nil {
 		currentVersion = manifest.Version
 		log.Debug("Current version", "version", currentVersion)
 	}
@@ -207,7 +211,7 @@ func (i *Installer) RemovePlugin(ctx context.Context, name string) error {
 	}
 
 	// Remove manifest
-	manifestPath := filepath.Join(i.pluginDir, name+".yaml")
+	manifestPath := filepath.Join(i.pluginDir, filepath.Base(name)+".json")
 	if err := os.Remove(manifestPath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to remove manifest: %w", err)
 	}
@@ -267,26 +271,122 @@ func (i *Installer) downloadManifest(ctx context.Context, ref, destPath string) 
 func (i *Installer) downloadBinary(ctx context.Context, ref, destPath, platform string) error {
 	log.Debug("Downloading binary", "reference", ref, "platform", platform)
 
-	// Create destination file
+	if err := i.downloadBinaryFromManifest(ctx, ref, destPath, platform); err != nil {
+		return fmt.Errorf("failed to download binary for platform %s: %w", platform, err)
+	}
+
+	return nil
+}
+
+func (i *Installer) downloadBinaryFromManifest(ctx context.Context, ref, destPath, platform string) error {
+	manifestBytes, manifestDesc, err := i.client.GetManifest(ctx, ref)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve manifest: %w", err)
+	}
+
+	switch manifestDesc.MediaType {
+	case ocispec.MediaTypeImageIndex:
+		return i.downloadBinaryFromIndex(ctx, ref, destPath, platform, manifestBytes)
+	case ocispec.MediaTypeImageManifest, "application/vnd.oci.artifact.manifest.v1+json":
+		return i.downloadBinaryFromSingleManifest(ctx, ref, destPath, manifestBytes)
+	case "":
+		// Media type may be empty; attempt to decode as index first, then manifest
+		if err := i.downloadBinaryFromIndex(ctx, ref, destPath, platform, manifestBytes); err == nil {
+			return nil
+		}
+		return i.downloadBinaryFromSingleManifest(ctx, ref, destPath, manifestBytes)
+	default:
+		if strings.Contains(manifestDesc.MediaType, "index") {
+			return i.downloadBinaryFromIndex(ctx, ref, destPath, platform, manifestBytes)
+		}
+		return i.downloadBinaryFromSingleManifest(ctx, ref, destPath, manifestBytes)
+	}
+}
+
+func (i *Installer) downloadBinaryFromIndex(ctx context.Context, ref, destPath, platform string, data []byte) error {
+	var index ocispec.Index
+	if err := json.Unmarshal(data, &index); err != nil {
+		return fmt.Errorf("failed to parse index manifest: %w", err)
+	}
+
+	osName, archName := splitPlatform(platform)
+	var selected *ocispec.Descriptor
+
+	for idx := range index.Manifests {
+		desc := &index.Manifests[idx]
+		if matchesPlatform(desc, osName, archName) {
+			selected = desc
+			break
+		}
+	}
+
+	if selected == nil {
+		return fmt.Errorf("no artifact found for platform %s", platform)
+	}
+
+	manifestBytes, err := i.client.FetchDescriptor(ctx, ref, *selected)
+	if err != nil {
+		return fmt.Errorf("failed to fetch platform manifest: %w", err)
+	}
+
+	return i.downloadBinaryFromSingleManifest(ctx, ref, destPath, manifestBytes)
+}
+
+func (i *Installer) downloadBinaryFromSingleManifest(ctx context.Context, ref, destPath string, data []byte) (err error) {
+	var manifest ocispec.Manifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return fmt.Errorf("failed to parse manifest: %w", err)
+	}
+
+	if len(manifest.Layers) == 0 {
+		return fmt.Errorf("manifest contains no layers")
+	}
+
+	layer := manifest.Layers[0]
 	file, err := os.Create(destPath)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		if err := file.Close(); err != nil {
-			log.Warn("Failed to close binary file", "error", err)
+		if closeErr := file.Close(); closeErr != nil {
+			log.Warn("Failed to close binary file", "error", closeErr)
+		}
+		if err != nil {
+			_ = os.Remove(destPath)
 		}
 	}()
 
-	// Construct platform-specific reference
-	binaryRef := fmt.Sprintf("%s-%s", ref, strings.ReplaceAll(platform, "/", "-"))
-
-	// Download binary
-	if err := i.client.Pull(ctx, binaryRef, file); err != nil {
-		return err
+	if err = i.client.CopyDescriptor(ctx, ref, layer, file); err != nil {
+		return fmt.Errorf("failed to download binary layer: %w", err)
 	}
 
 	return nil
+}
+
+func splitPlatform(platform string) (string, string) {
+	parts := strings.Split(platform, "/")
+	if len(parts) >= 2 {
+		return parts[0], parts[1]
+	}
+	return runtime.GOOS, runtime.GOARCH
+}
+
+func matchesPlatform(desc *ocispec.Descriptor, osName, archName string) bool {
+	if desc.Platform != nil {
+		if strings.EqualFold(desc.Platform.OS, osName) && strings.EqualFold(desc.Platform.Architecture, archName) {
+			return true
+		}
+	}
+
+	if desc.Annotations != nil {
+		osAnn := desc.Annotations["os"]
+		archAnn := desc.Annotations["architecture"]
+		if strings.EqualFold(osAnn, osName) && strings.EqualFold(archAnn, archName) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // downloadSignature downloads the plugin signature from the registry

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/delivery-station/ds/pkg/log"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/registry/remote"
 	"oras.land/oras-go/v2/registry/remote/auth"
@@ -191,32 +192,27 @@ func (c *Client) List(ctx context.Context, repository string) ([]string, error) 
 }
 
 // GetManifest fetches the manifest for an artifact
-func (c *Client) GetManifest(ctx context.Context, reference string) ([]byte, error) {
+func (c *Client) GetManifest(ctx context.Context, reference string) ([]byte, ocispec.Descriptor, error) {
 	log.Debug("Fetching manifest", "reference", reference)
 
-	// Create repository
 	repo, err := c.createRepository(reference)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create repository: %w", err)
+		return nil, ocispec.Descriptor{}, fmt.Errorf("failed to create repository: %w", err)
 	}
 
-	// Parse reference to get tag
 	tag := "latest"
 	if idx := lastIndex(reference, ":"); idx != -1 {
 		tag = reference[idx+1:]
-		// Note: reference base is not needed after tag extraction
 	}
 
-	// Resolve manifest descriptor
 	manifestDesc, err := repo.Resolve(ctx, tag)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve reference: %w", err)
+		return nil, ocispec.Descriptor{}, fmt.Errorf("failed to resolve reference: %w", err)
 	}
 
-	// Fetch manifest
 	manifestReader, err := repo.Fetch(ctx, manifestDesc)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch manifest: %w", err)
+		return nil, ocispec.Descriptor{}, fmt.Errorf("failed to fetch manifest: %w", err)
 	}
 	defer func() {
 		if err := manifestReader.Close(); err != nil {
@@ -224,13 +220,61 @@ func (c *Client) GetManifest(ctx context.Context, reference string) ([]byte, err
 		}
 	}()
 
-	// Read manifest
 	manifest, err := io.ReadAll(manifestReader)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read manifest: %w", err)
+		return nil, ocispec.Descriptor{}, fmt.Errorf("failed to read manifest: %w", err)
 	}
 
-	return manifest, nil
+	return manifest, manifestDesc, nil
+}
+
+// FetchDescriptor retrieves raw content for the provided descriptor referenced by the given base reference.
+func (c *Client) FetchDescriptor(ctx context.Context, reference string, desc ocispec.Descriptor) ([]byte, error) {
+	repo, err := c.createRepository(reference)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create repository: %w", err)
+	}
+
+	reader, err := repo.Fetch(ctx, desc)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch descriptor: %w", err)
+	}
+	defer func() {
+		if err := reader.Close(); err != nil {
+			log.Warn("Failed to close descriptor reader", "error", err)
+		}
+	}()
+
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read descriptor content: %w", err)
+	}
+
+	return data, nil
+}
+
+// CopyDescriptor streams descriptor content into the provided writer.
+func (c *Client) CopyDescriptor(ctx context.Context, reference string, desc ocispec.Descriptor, dest io.Writer) error {
+	repo, err := c.createRepository(reference)
+	if err != nil {
+		return fmt.Errorf("failed to create repository: %w", err)
+	}
+
+	reader, err := repo.Fetch(ctx, desc)
+	if err != nil {
+		return fmt.Errorf("failed to fetch descriptor: %w", err)
+	}
+	defer func() {
+		if err := reader.Close(); err != nil {
+			log.Warn("Failed to close descriptor reader", "error", err)
+		}
+	}()
+
+	if _, err := io.Copy(dest, reader); err != nil {
+		return fmt.Errorf("failed to copy descriptor content: %w", err)
+	}
+
+	return nil
 }
 
 // createRepository creates an ORAS repository with authentication

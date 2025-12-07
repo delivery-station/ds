@@ -84,7 +84,7 @@ func (m *Manager) DiscoverPlugins() error {
 		}
 
 		// Skip manifest files
-		if strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml") {
+		if strings.HasSuffix(name, ".json") || strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml") {
 			continue
 		}
 
@@ -253,20 +253,24 @@ func (m *Manager) getPluginVersion(pluginPath string) (string, error) {
 	return version, nil
 }
 
-// loadPluginManifest loads the plugin.yaml manifest file
+// loadPluginManifest loads the plugin manifest file
 func (m *Manager) loadPluginManifest(pluginPath string) (*types.PluginManifest, error) {
-	// Look for plugin.yaml in the same directory as the plugin binary
+	// Look for plugin manifest in the same directory as the plugin binary
 	dir := filepath.Dir(pluginPath)
 	base := filepath.Base(pluginPath)
 
 	// Remove extension if present
 	base = strings.TrimSuffix(base, filepath.Ext(base))
+	trimmed := strings.TrimPrefix(base, "ds-")
 
 	// Try different manifest locations
 	manifestPaths := []string{
-		filepath.Join(dir, base+".yaml"),
-		filepath.Join(dir, "plugin.yaml"),
-		filepath.Join(dir, base+".yml"),
+		filepath.Join(dir, base+".json"),
+		filepath.Join(dir, "plugin.json"),
+	}
+
+	if trimmed != base {
+		manifestPaths = append(manifestPaths, filepath.Join(dir, trimmed+".json"))
 	}
 
 	var manifestData []byte

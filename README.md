@@ -75,6 +75,8 @@ ds plugin install porter
 ds plugin update porter
 ds plugin sign <binary>
 
+> DS installs plugins from multi-architecture OCI indexes. Ensure the published reference includes manifests for each supported OS/architecture.
+
 # Use a plugin (artifact operations delegated to plugins)
 ds porter fetch ghcr.io/org/app:v1.0.0
 ds porter deliver ghcr.io/org/app:v1.0.0
@@ -96,6 +98,7 @@ DS supports multiple configuration sources with the following precedence:
 ```yaml
 # Registry configuration
 registry:
+  # The default entry can include a namespace (e.g. ghcr.io/delivery-station)
   default: "ghcr.io"
   mirrors:
     - "registry.example.com"
@@ -119,6 +122,8 @@ logging:
 # Plugin management
 plugins:
   dir: "~/.config/ds/plugins"
+  sources:
+    - registry: "ghcr.io/delivery-station"
 ```
 
 ### Environment Variables

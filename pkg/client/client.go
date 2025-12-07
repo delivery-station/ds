@@ -70,7 +70,8 @@ func NewClient(opts ...Option) (*Client, error) {
 	}
 
 	if c.registry == nil {
-		regClient, err := registry.NewClient(c.config.Registry.Default, nil)
+		insecure := registry.IsInsecureRegistry(c.config.Registry.Default, c.config.Registry.InsecureRegistries)
+		regClient, err := registry.NewClient(c.config.Registry.Default, nil, registry.WithInsecure(insecure))
 		if err != nil {
 			return nil, fmt.Errorf("failed to create registry client: %w", err)
 		}

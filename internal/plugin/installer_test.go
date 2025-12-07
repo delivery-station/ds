@@ -163,7 +163,7 @@ func TestRemovePlugin(t *testing.T) {
 	}
 
 	binaryPath := filepath.Join(tmpDir, binaryName)
-	manifestPath := filepath.Join(tmpDir, pluginName+".yaml")
+	manifestPath := filepath.Join(tmpDir, pluginName+".json")
 
 	// Create files
 	_ = os.WriteFile(binaryPath, []byte("binary"), 0755)
@@ -208,18 +208,13 @@ func TestRemovePlugin_NotFound(t *testing.T) {
 
 func TestLoadPluginManifestFromInstaller(t *testing.T) {
 	tmpDir := t.TempDir()
-	manifestPath := filepath.Join(tmpDir, "plugin.yaml")
+	manifestPath := filepath.Join(tmpDir, "plugin.json")
 
-	// Create manifest file
-	manifestContent := `name: testplugin
-version: 1.0.0
-description: Test plugin
-`
+	manifestContent := `{"name":"testplugin","version":"1.0.0","description":"Test plugin"}`
 	if err := os.WriteFile(manifestPath, []byte(manifestContent), 0644); err != nil {
 		t.Fatalf("failed to create manifest: %v", err)
 	}
 
-	// Load manifest
 	manifest, err := loadPluginManifest(manifestPath)
 	if err != nil {
 		t.Fatalf("loadPluginManifest failed: %v", err)
@@ -235,7 +230,7 @@ description: Test plugin
 }
 
 func TestLoadPluginManifestFromInstaller_NotFound(t *testing.T) {
-	_, err := loadPluginManifest("/nonexistent/path/plugin.yaml")
+	_, err := loadPluginManifest("/nonexistent/path/plugin.json")
 	if err == nil {
 		t.Error("expected error for non-existent manifest")
 	}

@@ -209,13 +209,8 @@ func main() {
 	buildTestPlugin(t, tmpDir, "testexec", sourceCode)
 
 	// Create manifest
-	manifestPath := filepath.Join(tmpDir, "ds-testexec.yaml")
-	manifest := `name: testexec
-version: 1.0.0
-platform:
-  os: [linux, darwin, windows]
-  arch: [amd64, arm64]
-`
+	manifestPath := filepath.Join(tmpDir, "ds-testexec.json")
+	manifest := `{"name":"testexec","version":"1.0.0","platform":{"os":["linux","darwin","windows"],"arch":["amd64","arm64"]},"commands":[{"name":"run","description":"Run command"}]}`
 	if err := os.WriteFile(manifestPath, []byte(manifest), 0644); err != nil {
 		t.Fatalf("failed to create manifest: %v", err)
 	}
@@ -289,13 +284,8 @@ func main() {
 	buildTestPlugin(t, tmpDir, "failplugin", sourceCode)
 
 	// Create manifest
-	manifestPath := filepath.Join(tmpDir, "ds-failplugin.yaml")
-	manifest := `name: failplugin
-version: 1.0.0
-platform:
-  os: [linux, darwin, windows]
-  arch: [amd64, arm64]
-`
+	manifestPath := filepath.Join(tmpDir, "ds-failplugin.json")
+	manifest := `{"name":"failplugin","version":"1.0.0","platform":{"os":["linux","darwin","windows"],"arch":["amd64","arm64"]},"commands":[{"name":"run"}]}`
 	if err := os.WriteFile(manifestPath, []byte(manifest), 0644); err != nil {
 		t.Fatalf("failed to create manifest: %v", err)
 	}
@@ -369,13 +359,8 @@ func main() {
 	buildTestPlugin(t, tmpDir, "outputplugin", sourceCode)
 
 	// Create manifest
-	manifestPath := filepath.Join(tmpDir, "ds-outputplugin.yaml")
-	manifest := `name: outputplugin
-version: 1.0.0
-platform:
-  os: [linux, darwin, windows]
-  arch: [amd64, arm64]
-`
+	manifestPath := filepath.Join(tmpDir, "ds-outputplugin.json")
+	manifest := `{"name":"outputplugin","version":"1.0.0","platform":{"os":["linux","darwin","windows"],"arch":["amd64","arm64"]},"commands":[{"name":"run"}]}`
 	if err := os.WriteFile(manifestPath, []byte(manifest), 0644); err != nil {
 		t.Fatalf("failed to create manifest: %v", err)
 	}
@@ -461,13 +446,8 @@ func main() {
 	buildTestPlugin(t, tmpDir, "slowplugin", sourceCode)
 
 	// Create manifest
-	manifestPath := filepath.Join(tmpDir, "ds-slowplugin.yaml")
-	manifest := `name: slowplugin
-version: 1.0.0
-platform:
-  os: [linux, darwin, windows]
-  arch: [amd64, arm64]
-`
+	manifestPath := filepath.Join(tmpDir, "ds-slowplugin.json")
+	manifest := `{"name":"slowplugin","version":"1.0.0","platform":{"os":["linux","darwin","windows"],"arch":["amd64","arm64"]},"commands":[{"name":"run"}]}`
 	if err := os.WriteFile(manifestPath, []byte(manifest), 0644); err != nil {
 		t.Fatalf("failed to create manifest: %v", err)
 	}

@@ -74,17 +74,8 @@ func TestDiscoverPlugins_WithMockPlugin(t *testing.T) {
 	}
 
 	// Create plugin manifest
-	manifestPath := filepath.Join(tmpDir, "ds-testplugin.yaml")
-	manifestContent := `name: testplugin
-version: 1.0.0
-description: Test plugin for unit tests
-commands:
-  - name: test
-    description: Test command
-platform:
-  os: [linux, darwin, windows]
-  arch: [amd64, arm64]
-`
+	manifestPath := filepath.Join(tmpDir, "ds-testplugin.json")
+	manifestContent := `{"name":"testplugin","version":"1.0.0","description":"Test plugin for unit tests","commands":[{"name":"test","description":"Test command"}],"platform":{"os":["linux","darwin","windows"],"arch":["amd64","arm64"]}}`
 	if err := os.WriteFile(manifestPath, []byte(manifestContent), 0644); err != nil {
 		t.Fatalf("failed to create manifest: %v", err)
 	}
@@ -356,19 +347,8 @@ func TestLoadPluginManifest(t *testing.T) {
 	}
 
 	// Create manifest
-	manifestPath := filepath.Join(tmpDir, "ds-manifesttest.yaml")
-	manifestContent := `name: manifesttest
-version: 2.0.0
-description: Manifest test plugin
-commands:
-  - name: cmd1
-    description: Command 1
-  - name: cmd2
-    description: Command 2
-platform:
-  os: [linux, darwin]
-  arch: [amd64]
-`
+	manifestPath := filepath.Join(tmpDir, "ds-manifesttest.json")
+	manifestContent := `{"name":"manifesttest","version":"2.0.0","description":"Manifest test plugin","commands":[{"name":"cmd1","description":"Command 1"},{"name":"cmd2","description":"Command 2"}],"platform":{"os":["linux","darwin"],"arch":["amd64"]}}`
 	if err := os.WriteFile(manifestPath, []byte(manifestContent), 0644); err != nil {
 		t.Fatalf("failed to create manifest: %v", err)
 	}

@@ -21,10 +21,11 @@ Plugins must adhere to the following contract:
 
 1. **Binary Naming**: `ds-<plugin-name>` (lowercase, hyphen-separated)
 2. **Manifest**: `plugin.yaml` or `<plugin-name>.yaml` in the same directory
-3. **Version Flag**: Support `--version` flag
-4. **Exit Codes**: Return 0 for success, non-zero for errors
-5. **Configuration**: Read from `DS_*` environment variables
-6. **Output**: Write to stdout/stderr appropriately
+3. **Distribution Manifest**: `ds.manifest.yaml` for OCI distribution (see [Plugin Manifest Specification](plugin-manifest.md))
+4. **Version Flag**: Support `--version` flag
+5. **Exit Codes**: Return 0 for success, non-zero for errors
+6. **Configuration**: Read from `DS_*` environment variables
+7. **Output**: Write to stdout/stderr appropriately
 
 ## Quick Start
 
@@ -528,6 +529,8 @@ docker manifest create ghcr.io/myorg/ds-my-plugin:1.0.0 \
 
 # Push manifest list
 docker manifest push ghcr.io/myorg/ds-my-plugin:1.0.0
+
+> **Important**: DS installs plugins exclusively from multi-architecture indexes. Always push an OCI index (`application/vnd.oci.image.index.v1+json`) that references each platform-specific binary. DS does not attempt to resolve architecture-specific tags such as `:latest-darwin-arm64`; if the index is missing an entry for the requesting platform, installation will fail.
 ```
 
 ## Plugin Examples

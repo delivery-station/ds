@@ -93,7 +93,8 @@ func Execute() error {
 					exitCode, pluginErr := executePlugin(pluginName, pluginArgs)
 					if pluginErr != nil {
 						// If plugin was not found, return the original "unknown command" error
-						if strings.Contains(pluginErr.Error(), "not found") {
+						// We check for the specific error message returned by the executor
+						if strings.Contains(pluginErr.Error(), fmt.Sprintf("plugin '%s' not found", pluginName)) {
 							return err
 						}
 						// Otherwise, return the plugin execution error
@@ -112,6 +113,16 @@ func Execute() error {
 
 // executePlugin attempts to execute a plugin
 func executePlugin(pluginName string, args []string) (int, error) {
+	// Manually check for --log-level flag in os.Args
+	for i, arg := range os.Args {
+		if arg == "--log-level" && i+1 < len(os.Args) {
+			logLevel = os.Args[i+1]
+		}
+		if strings.HasPrefix(arg, "--log-level=") {
+			logLevel = strings.TrimPrefix(arg, "--log-level=")
+		}
+	}
+
 	// Initialize config manually (since PersistentPreRunE won't run for unknown commands)
 	if err := initConfig(); err != nil {
 		// Continue anyway with defaults - config errors are non-fatal for plugin execution

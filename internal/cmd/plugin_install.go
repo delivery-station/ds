@@ -100,7 +100,9 @@ func runPluginInstall(cmd *cobra.Command, args []string) error {
 		registryURL = "ghcr.io"
 	}
 
-	client, err := registry.NewClient(registryURL, authProvider)
+	insecure := registry.IsInsecureRegistry(registryURL, cfg.Registry.InsecureRegistries)
+
+	client, err := registry.NewClient(registryURL, authProvider, registry.WithInsecure(insecure))
 	if err != nil {
 		return fmt.Errorf("failed to create registry client: %w", err)
 	}
@@ -154,7 +156,9 @@ func runPluginUpdate(cmd *cobra.Command, args []string) error {
 		registryURL = "ghcr.io"
 	}
 
-	client, err := registry.NewClient(registryURL, authProvider)
+	insecure := registry.IsInsecureRegistry(registryURL, cfg.Registry.InsecureRegistries)
+
+	client, err := registry.NewClient(registryURL, authProvider, registry.WithInsecure(insecure))
 	if err != nil {
 		return fmt.Errorf("failed to create registry client: %w", err)
 	}
@@ -214,7 +218,9 @@ func runPluginRemove(cmd *cobra.Command, args []string) error {
 		registryURL = "ghcr.io"
 	}
 
-	client, err := registry.NewClient(registryURL, authProvider)
+	insecure := registry.IsInsecureRegistry(registryURL, cfg.Registry.InsecureRegistries)
+
+	client, err := registry.NewClient(registryURL, authProvider, registry.WithInsecure(insecure))
 	if err != nil {
 		return fmt.Errorf("failed to create registry client: %w", err)
 	}

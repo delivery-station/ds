@@ -32,6 +32,7 @@ DS supports both YAML and TOML formats. Examples below use YAML.
 # Registry Configuration
 registry:
   # Default registry for plugin and artifact operations
+  # Registry can include an optional namespace prefix (e.g. ghcr.io/delivery-station)
   default: "ghcr.io"
   
   # Alternative registries to try if default fails
@@ -43,6 +44,7 @@ registry:
   insecure_registries:
     - "localhost:5000"
     - "192.168.1.100:5000"
+    # Entries can be provided with or without repository prefixes (e.g. localhost/delivery-station)
 
 # Authentication Configuration
 auth:
@@ -99,8 +101,9 @@ plugins:
   
   # Plugin sources (registries to search for plugins during manual installation)
   sources:
-    - "ghcr.io/delivery-station"
-    - "registry.example.com/plugins"
+    - registry: "ghcr.io/delivery-station"
+    - registry: "registry.example.com/plugins"
+      version_constraint: ">=1.0.0"
   
   # Plugin execution timeout (0 = no timeout)
   timeout: "5m"
@@ -183,7 +186,9 @@ export DS_LOGGING_SHOW_CALLER=true
 
 ```bash
 export DS_PLUGINS_DIR=~/.config/ds/plugins
-export DS_PLUGINS_SOURCES_0=ghcr.io/delivery-station
+export DS_PLUGINS_SOURCES_0_REGISTRY=ghcr.io/delivery-station
+export DS_PLUGINS_SOURCES_1_REGISTRY=registry.example.com/plugins
+export DS_PLUGINS_SOURCES_1_VERSION_CONSTRAINT=">=1.0.0"
 export DS_PLUGINS_TIMEOUT=5m
 export DS_PLUGINS_CONTEXT_ENABLED=true
 ```
