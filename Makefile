@@ -14,10 +14,15 @@ GOTEST=$(GOCMD) test
 GOMOD=$(GOCMD) mod
 GOFMT=$(GOCMD) fmt
 GOVET=$(GOCMD) vet
+GOPATH := $(shell $(GOCMD) env GOPATH)
+DIRS := $(GOPATH)/src $(GOPATH)/bin $(GOPATH)/pkg
 
 # Build directories
 BUILD_DIR=bin
 CMD_DIR=cmd/ds
+
+$(DIRS):
+	mkdir -p $@
 
 help: ## Display this help message
 	@echo "Available targets:"
@@ -61,7 +66,7 @@ clean: ## Clean build artifacts
 	@rm -f coverage.out coverage.html
 	@echo "Clean complete"
 
-install: build ## Install binary to $GOPATH/bin
+install: $(DIRS) build ## Install binary to $GOPATH/bin
 	@echo "Installing $(BINARY_NAME)..."
 	@cp $(BUILD_DIR)/$(BINARY_NAME) $(GOPATH)/bin/$(BINARY_NAME)
 	@echo "Installed to $(GOPATH)/bin/$(BINARY_NAME)"
