@@ -4,7 +4,7 @@
 # Registry Configuration
 registry:
   # Default registry for plugin and artifact operations
-  default: "ghcr.io"
+  default: "ghcr.io/delivery-station"
   
   # Alternative registries to try if default fails
   mirrors:
@@ -22,7 +22,7 @@ auth:
   
   # Explicit credentials (alternative to docker_config)
   credentials:
-    - registry: "ghcr.io"
+    - registry: "ghcr.io/delivery-station"
       username: "myuser"
       password: "${GITHUB_TOKEN}"
     - registry: "registry.example.com"

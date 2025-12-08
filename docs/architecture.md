@@ -97,14 +97,14 @@ Delivery Station (DS) is a meta-application framework that provides plugin manag
 ```
 Binary naming: ds-<plugin-name>
 Manifest: plugin.yaml in same directory
-Configuration: Via DS_* environment variables
+Configuration: Via Host Config gRPC service
 Invocation: ds <plugin-name> <args>
 ```
 
 **Key Design Decisions**:
 - Plugins are separate binaries, not in-process
 - Binary naming convention (`ds-*`) enables auto-discovery
-- Configuration passed via environment (no config file parsing needed)
+- Configuration delivered through Host Config service (no plugin-side config parsing)
 - Plugins distributed as OCI artifacts
 - No automatic installation (security)
 
@@ -222,12 +222,9 @@ User: ds porter fetch ghcr.io/org/app:v1
   │
   ├─> Discover plugins (scan ~/.config/ds/plugins/)
   ├─> Find "porter" plugin (ds-porter binary)
-  ├─> Prepare environment
+  ├─> Prepare execution context
   │   ├─> Load DS configuration
-  │   ├─> Set DS_* environment variables
-  │   │   ├─> DS_REGISTRY_DEFAULT=ghcr.io
-  │   │   ├─> DS_CACHE_DIR=~/.cache/ds
-  │   │   └─> DS_AUTH_DOCKER_CONFIG=~/.docker/config.json
+  │   ├─> Expose Host Config gRPC service via go-plugin broker
   │   └─> Set plugin context (JSON via stdin)
   ├─> Execute: exec.Command("ds-porter", "fetch", "ghcr.io/org/app:v1")
   ├─> Stream stdout/stderr to terminal
@@ -262,7 +259,7 @@ Porter Plugin: Need to upload to S3
   ├─> Use DS client library
   ├─> Call: client.CallPlugin("s3-uploader", args)
   ├─> DS spawns s3-uploader subprocess
-  │   └─> Inherits DS_* environment
+  │   └─> Shares Host Config provider via broker
   ├─> Pass data via stdin (JSON)
   ├─> Capture s3-uploader output
   └─> Return result to porter
@@ -291,25 +288,19 @@ Porter Plugin: Need to upload to S3
 - More memory (separate processes)
 - Inter-process communication overhead
 
-### Why Environment Variables for Config?
+### How Plugins Receive Configuration
 
-**Alternatives Considered**:
-- Config file path passed to plugin
-- JSON via stdin
-- gRPC configuration service
-
-**Decision**: Environment variables with DS_* prefix
+**Approach**: Host Config gRPC service provided through the go-plugin broker for every invocation.
 
 **Rationale**:
-- **Simplicity**: No parsing required
-- **Universal**: Works in all languages
-- **12-Factor App**: Industry standard practice
-- **Overrides**: Easy to override per-invocation
-- **Shell Integration**: Works with existing scripts
+- **Typed data**: Host Config returns the full structured configuration after precedence resolution.
+- **Future proof**: gRPC service can evolve without forcing plugins to parse new formats.
+- **Single source of truth**: Eliminates divergent environment-derived overrides.
+- **Secure handling**: Credentials never touch environment variables.
 
 **Trade-offs**:
-- Limited data types (strings only)
-- Environment size limits (typically 128KB)
+- Plugins must obtain the broker reference and invoke the Host Config service.
+- Non-Go plugins need a lightweight gRPC client to consume the service.
 
 ### Why Content-Addressable Cache?
 

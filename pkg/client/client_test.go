@@ -28,7 +28,7 @@ func TestNewClient(t *testing.T) {
 			Dir: filepath.Join(tmpDir, "plugins"),
 		},
 		Registry: types.RegistryConfig{
-			Default: "ghcr.io",
+			Default: "ghcr.io/delivery-station",
 		},
 	}
 
@@ -115,7 +115,7 @@ func TestNewClient_WithCache(t *testing.T) {
 			Dir: filepath.Join(tmpDir, "plugins"),
 		},
 		Registry: types.RegistryConfig{
-			Default: "ghcr.io",
+			Default: "ghcr.io/delivery-station",
 		},
 	}
 
@@ -145,11 +145,11 @@ func TestNewClient_WithRegistry(t *testing.T) {
 			Dir: tmpDir,
 		},
 		Registry: types.RegistryConfig{
-			Default: "ghcr.io",
+			Default: "ghcr.io/delivery-station",
 		},
 	}
 
-	customRegistry, err := registry.NewClient("ghcr.io", nil)
+	customRegistry, err := registry.NewClient("ghcr.io/delivery-station", nil)
 	if err != nil {
 		t.Fatalf("Failed to create registry: %v", err)
 	}
@@ -183,7 +183,7 @@ func TestNewClient_WithPluginManager(t *testing.T) {
 			Dir: filepath.Join(tmpDir, "plugins"),
 		},
 		Registry: types.RegistryConfig{
-			Default: "ghcr.io",
+			Default: "ghcr.io/delivery-station",
 		},
 	}
 
@@ -214,7 +214,7 @@ func TestClient_PullAndPush(t *testing.T) {
 			Dir: filepath.Join(tmpDir, "plugins"),
 		},
 		Registry: types.RegistryConfig{
-			Default: "ghcr.io",
+			Default: "ghcr.io/delivery-station",
 		},
 	}
 
@@ -253,7 +253,7 @@ func TestClient_List(t *testing.T) {
 			Dir: filepath.Join(tmpDir, "plugins"),
 		},
 		Registry: types.RegistryConfig{
-			Default: "ghcr.io",
+			Default: "ghcr.io/delivery-station",
 		},
 	}
 
@@ -328,7 +328,7 @@ func TestClient_EventBus(t *testing.T) {
 			Dir: filepath.Join(tmpDir, "plugins"),
 		},
 		Registry: types.RegistryConfig{
-			Default: "ghcr.io",
+			Default: "ghcr.io/delivery-station",
 		},
 	}
 
@@ -382,7 +382,7 @@ func TestClient_StateManagement(t *testing.T) {
 			Dir: filepath.Join(tmpDir, "plugins"),
 		},
 		Registry: types.RegistryConfig{
-			Default: "ghcr.io",
+			Default: "ghcr.io/delivery-station",
 		},
 	}
 
@@ -430,7 +430,7 @@ func TestClient_PluginRegistration(t *testing.T) {
 			Dir: filepath.Join(tmpDir, "plugins"),
 		},
 		Registry: types.RegistryConfig{
-			Default: "ghcr.io",
+			Default: "ghcr.io/delivery-station",
 		},
 	}
 
@@ -470,7 +470,7 @@ func TestClient_Accessors(t *testing.T) {
 			Dir: filepath.Join(tmpDir, "plugins"),
 		},
 		Registry: types.RegistryConfig{
-			Default: "ghcr.io",
+			Default: "ghcr.io/delivery-station",
 		},
 	}
 
@@ -519,7 +519,7 @@ func TestClient_Close(t *testing.T) {
 			Dir: filepath.Join(tmpDir, "plugins"),
 		},
 		Registry: types.RegistryConfig{
-			Default: "ghcr.io",
+			Default: "ghcr.io/delivery-station",
 		},
 	}
 

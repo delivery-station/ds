@@ -18,8 +18,8 @@ func TestLoadDefaults(t *testing.T) {
 	loader.LoadDefaults()
 
 	// Check registry defaults
-	if v.GetString("registry.default") != "ghcr.io" {
-		t.Errorf("expected registry.default to be ghcr.io, got %s", v.GetString("registry.default"))
+	if v.GetString("registry.default") != "ghcr.io/delivery-station" {
+		t.Errorf("expected registry.default to be ghcr.io/delivery-station, got %s", v.GetString("registry.default"))
 	}
 
 	// Check cache defaults
@@ -124,7 +124,7 @@ func TestValidate(t *testing.T) {
 		{
 			name: "valid config",
 			config: types.Config{
-				Registry: types.RegistryConfig{Default: "ghcr.io"},
+				Registry: types.RegistryConfig{Default: "ghcr.io/delivery-station"},
 				Cache:    types.CacheConfig{Dir: "/tmp/cache", MaxSize: 10 * 1024 * 1024 * 1024, TTL: 7 * 24 * time.Hour},
 				Logging:  types.LoggingConfig{Level: "info", Format: "text"},
 				Plugins:  types.PluginsConfig{Dir: "/tmp/plugins"},
@@ -145,7 +145,7 @@ func TestValidate(t *testing.T) {
 		{
 			name: "invalid log level",
 			config: types.Config{
-				Registry: types.RegistryConfig{Default: "ghcr.io"},
+				Registry: types.RegistryConfig{Default: "ghcr.io/delivery-station"},
 				Cache:    types.CacheConfig{Dir: "/tmp/cache", MaxSize: 10 * 1024 * 1024 * 1024, TTL: 7 * 24 * time.Hour},
 				Logging:  types.LoggingConfig{Level: "invalid", Format: "text"},
 				Plugins:  types.PluginsConfig{Dir: "/tmp/plugins"},
@@ -155,7 +155,7 @@ func TestValidate(t *testing.T) {
 		{
 			name: "invalid log format",
 			config: types.Config{
-				Registry: types.RegistryConfig{Default: "ghcr.io"},
+				Registry: types.RegistryConfig{Default: "ghcr.io/delivery-station"},
 				Cache:    types.CacheConfig{Dir: "/tmp/cache", MaxSize: 10 * 1024 * 1024 * 1024, TTL: 7 * 24 * time.Hour},
 				Logging:  types.LoggingConfig{Level: "info", Format: "invalid"},
 				Plugins:  types.PluginsConfig{Dir: "/tmp/plugins"},
@@ -165,7 +165,7 @@ func TestValidate(t *testing.T) {
 		{
 			name: "empty cache dir",
 			config: types.Config{
-				Registry: types.RegistryConfig{Default: "ghcr.io"},
+				Registry: types.RegistryConfig{Default: "ghcr.io/delivery-station"},
 				Cache:    types.CacheConfig{Dir: "", MaxSize: 10 * 1024 * 1024 * 1024, TTL: 7 * 24 * time.Hour},
 				Logging:  types.LoggingConfig{Level: "info", Format: "text"},
 				Plugins:  types.PluginsConfig{Dir: "/tmp/plugins"},

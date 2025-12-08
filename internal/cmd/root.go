@@ -161,7 +161,7 @@ func executePlugin(pluginName string, args []string) (int, error) {
 	}
 
 	// Create executor
-	executor := plugin.NewExecutor(mgr)
+	executor := plugin.NewExecutor(mgr, cfg)
 
 	// Execute plugin
 	exitCode, err := executor.ExecutePlugin(pluginName, args)
@@ -265,7 +265,7 @@ func setDefaults() {
 	home, _ := os.UserHomeDir()
 
 	// Registry defaults
-	viper.SetDefault("registry.default", "ghcr.io")
+	viper.SetDefault("registry.default", "ghcr.io/delivery-station")
 	viper.SetDefault("registry.insecure_registries", []string{})
 
 	// Cache defaults

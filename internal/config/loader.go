@@ -85,7 +85,7 @@ func (l *Loader) LoadDefaults() {
 	home, _ := os.UserHomeDir()
 
 	// Registry defaults
-	l.viper.SetDefault("registry.default", "ghcr.io")
+	l.viper.SetDefault("registry.default", "ghcr.io/delivery-station")
 	l.viper.SetDefault("registry.mirrors", []string{})
 	l.viper.SetDefault("registry.insecure_registries", []string{})
 

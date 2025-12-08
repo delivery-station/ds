@@ -11,7 +11,7 @@ import (
 )
 
 func TestNewInstaller(t *testing.T) {
-	installer := NewInstaller("/test/plugins", "ghcr.io", nil)
+	installer := NewInstaller("/test/plugins", "ghcr.io/delivery-station", nil)
 
 	if installer == nil {
 		t.Fatal("NewInstaller returned nil")
@@ -21,8 +21,8 @@ func TestNewInstaller(t *testing.T) {
 		t.Errorf("expected plugin dir '/test/plugins', got '%s'", installer.pluginDir)
 	}
 
-	if installer.registry != "ghcr.io" {
-		t.Errorf("expected registry 'ghcr.io', got '%s'", installer.registry)
+	if installer.registry != "ghcr.io/delivery-station" {
+		t.Errorf("expected registry 'ghcr.io/delivery-station', got '%s'", installer.registry)
 	}
 }
 
@@ -171,8 +171,8 @@ func TestRemovePlugin(t *testing.T) {
 
 	// Create installer
 	authProvider := registry.NewAuthProvider()
-	client, _ := registry.NewClient("ghcr.io", authProvider)
-	installer := NewInstaller(tmpDir, "ghcr.io", client)
+	client, _ := registry.NewClient("ghcr.io/delivery-station", authProvider)
+	installer := NewInstaller(tmpDir, "ghcr.io/delivery-station", client)
 
 	// Remove plugin
 	ctx := context.Background()
@@ -195,8 +195,8 @@ func TestRemovePlugin_NotFound(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	authProvider := registry.NewAuthProvider()
-	client, _ := registry.NewClient("ghcr.io", authProvider)
-	installer := NewInstaller(tmpDir, "ghcr.io", client)
+	client, _ := registry.NewClient("ghcr.io/delivery-station", authProvider)
+	installer := NewInstaller(tmpDir, "ghcr.io/delivery-station", client)
 
 	// Try to remove non-existent plugin (should not error)
 	ctx := context.Background()
@@ -252,8 +252,8 @@ func TestBackupPlugin(t *testing.T) {
 	}
 
 	authProvider := registry.NewAuthProvider()
-	client, _ := registry.NewClient("ghcr.io", authProvider)
-	installer := NewInstaller(tmpDir, "ghcr.io", client)
+	client, _ := registry.NewClient("ghcr.io/delivery-station", authProvider)
+	installer := NewInstaller(tmpDir, "ghcr.io/delivery-station", client)
 
 	// Backup plugin
 	err := installer.backupPlugin(pluginName)

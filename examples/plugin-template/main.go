@@ -44,6 +44,10 @@ func main() {
 	}
 	defer dsClient.Close()
 
+	if dsClient.Config() == nil {
+		log.Fatalf("Failed to load DS configuration")
+	}
+
 	ctx := context.Background()
 
 	// Route to command handler
@@ -87,14 +91,22 @@ For more information: https://github.com/delivery-station/ds
 }
 
 func handleHello(ctx context.Context, dsClient *client.Client, args []string) {
+	cfg := dsClient.Config()
+	if cfg == nil {
+		log.Printf("Warning: DS configuration unavailable, falling back to defaults")
+	}
+
 	name := "World"
 	if len(args) > 0 {
 		name = args[0]
 	}
 
-	// Read DS configuration from environment
-	registry := os.Getenv("DS_REGISTRY_DEFAULT")
-	logLevel := os.Getenv("DS_LOGGING_LEVEL")
+	logLevel := "info"
+	registry := ""
+	if cfg != nil {
+		logLevel = cfg.Logging.Level
+		registry = cfg.Registry.Default
+	}
 
 	fmt.Printf("Hello, %s!\n", name)
 
@@ -126,7 +138,10 @@ func handleProcess(ctx context.Context, dsClient *client.Client, args []string) 
 	artifactRef := args[0]
 
 	// Log what we're doing
-	logLevel := os.Getenv("DS_LOGGING_LEVEL")
+	logLevel := "info"
+	if cfg := dsClient.Config(); cfg != nil {
+		logLevel = cfg.Logging.Level
+	}
 	if logLevel == "debug" || logLevel == "info" {
 		fmt.Printf("Processing artifact: %s\n", artifactRef)
 	}

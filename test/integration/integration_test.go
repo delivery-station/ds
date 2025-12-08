@@ -141,7 +141,7 @@ func TestPluginIntegration(t *testing.T) {
 
 	cfg := &types.Config{
 		Registry: types.RegistryConfig{
-			Default: "ghcr.io",
+			Default: "ghcr.io/delivery-station",
 		},
 		Cache: types.CacheConfig{
 			Dir:     filepath.Join(tmpDir, "cache"),

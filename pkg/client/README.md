@@ -38,7 +38,7 @@ cfg := &types.Config{
         Dir: "/path/to/plugins",
     },
     Registry: types.RegistryConfig{
-        Default: "ghcr.io",
+        Default: "ghcr.io/delivery-station",
     },
 }
 

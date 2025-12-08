@@ -12,112 +12,6 @@ A DS plugin is:
 - A standalone executable binary
 - Named with `ds-` prefix (e.g., `ds-porter`, `ds-s3-uploader`)
 - Accompanied by a `plugin.yaml` manifest
-- Distributed as an OCI artifact
-- Invoked as a subprocess by DS core
-
-### Plugin Contract
-
-Plugins must adhere to the following contract:
-
-1. **Binary Naming**: `ds-<plugin-name>` (lowercase, hyphen-separated)
-2. **Manifest**: `plugin.yaml` or `<plugin-name>.yaml` in the same directory
-3. **Distribution Manifest**: `ds.manifest.yaml` for OCI distribution (see [Plugin Manifest Specification](plugin-manifest.md))
-4. **Version Flag**: Support `--version` flag
-5. **Exit Codes**: Return 0 for success, non-zero for errors
-6. **Configuration**: Read from `DS_*` environment variables
-7. **Output**: Write to stdout/stderr appropriately
-
-## Quick Start
-
-### 1. Create Plugin Directory
-
-```bash
-mkdir my-plugin
-cd my-plugin
-```
-
-### 2. Create Plugin Binary
-
-Example in Go:
-
-```go
-// main.go
-package main
-
-import (
-    "fmt"
-    "os"
-)
-
-const version = "1.0.0"
-
-func main() {
-    // Handle --version flag
-    if len(os.Args) > 1 && os.Args[1] == "--version" {
-        fmt.Println(version)
-        os.Exit(0)
-    }
-
-    // Read DS configuration from environment
-    registry := os.Getenv("DS_REGISTRY_DEFAULT")
-    cacheDir := os.Getenv("DS_CACHE_DIR")
-    
-    fmt.Printf("Using registry: %s\n", registry)
-    fmt.Printf("Using cache: %s\n", cacheDir)
-    
-    // Your plugin logic here
-    fmt.Println("Hello from my-plugin!")
-}
-```
-
-Build:
-```bash
-go build -o ds-my-plugin main.go
-chmod +x ds-my-plugin
-```
-
-Example in Python:
-
-```python
-#!/usr/bin/env python3
-import os
-import sys
-
-VERSION = "1.0.0"
-
-def main():
-    # Handle --version flag
-    if len(sys.argv) > 1 and sys.argv[1] == "--version":
-        print(VERSION)
-        sys.exit(0)
-    
-    # Read DS configuration from environment
-    registry = os.getenv("DS_REGISTRY_DEFAULT", "")
-    cache_dir = os.getenv("DS_CACHE_DIR", "")
-    
-    print(f"Using registry: {registry}")
-    print(f"Using cache: {cache_dir}")
-    
-    # Your plugin logic here
-    print("Hello from my-plugin!")
-
-if __name__ == "__main__":
-    main()
-```
-
-Make executable:
-```bash
-chmod +x ds-my-plugin
-```
-
-### 3. Create Plugin Manifest
-
-```yaml
-# plugin.yaml
-name: my-plugin
-version: 1.0.0
-description: My awesome DS plugin
-author: Your Name <your.email@example.com>
 
 # Supported platforms
 platforms:
@@ -161,11 +55,6 @@ config:
 # Test version flag
 ./ds-my-plugin --version
 
-# Test with DS environment
-export DS_REGISTRY_DEFAULT=ghcr.io
-export DS_CACHE_DIR=~/.cache/ds
-./ds-my-plugin
-
 # Install locally
 mkdir -p ~/.config/ds/plugins
 cp ds-my-plugin ~/.config/ds/plugins/
@@ -173,6 +62,8 @@ cp plugin.yaml ~/.config/ds/plugins/my-plugin.yaml
 
 # Test via DS
 ds my-plugin hello
+
+> Tip: DS provides plugin configuration exclusively through the Host Config service. Environment variable fallbacks are no longer available.
 ```
 
 ## Using the DS Client Library
@@ -186,6 +77,8 @@ go get github.com/delivery-station/ds/pkg/client
 ```
 
 ### Basic Usage
+
+When the host configuration service is unavailable (for example, older DS releases), fall back to parsing environment variables directly:
 
 ```go
 package main
@@ -264,97 +157,50 @@ fmt.Println(output)
 
 ## Configuration Access
 
-### Environment Variables
+### Host Configuration Service (Recommended)
 
-DS automatically sets these environment variables for plugins:
+DS exposes the **Host Config** gRPC service to every plugin invocation. The service is registered through the HashiCorp go-plugin broker and is reachable from the plugin execution context. Plugins can fetch the full, structured DS configuration without relying on environment variable parsing.
 
-```bash
-# Registry configuration
-DS_REGISTRY_DEFAULT          # Default registry (e.g., ghcr.io)
-DS_REGISTRY_MIRRORS          # JSON array of mirror registries
-DS_REGISTRY_INSECURE         # JSON array of insecure registries
+- Works across languages that can access the go-plugin broker
+- Provides typed configuration (mirrors, credentials, cache settings, plugin sources)
+- Always reflects the effective configuration after CLI flags, env overrides, and config files are reconciled
 
-# Cache configuration
-DS_CACHE_DIR                 # Cache directory path
-DS_CACHE_MAX_SIZE            # Maximum cache size
-DS_CACHE_TTL                 # Cache TTL
+> **Important:** DS no longer injects `DS_*` environment variables for configuration. Plugins must request configuration from the Host Config service.
 
-# Authentication
-DS_AUTH_DOCKER_CONFIG        # Path to Docker config.json
-DS_AUTH_CREDENTIALS          # JSON array of explicit credentials
+When you need DS configuration (registry, cache, credentials), request it via the Host Config service described later in this guide.
 
-# Plugin configuration
-DS_PLUGINS_DIR               # Plugin directory
-DS_PLUGINS_TIMEOUT           # Plugin execution timeout
-
-# Logging
-DS_LOGGING_LEVEL             # Log level (debug, info, warn, error)
-DS_LOGGING_FORMAT            # Log format (text, json)
-
-# Context (when called by another plugin)
-DS_PLUGIN_CONTEXT            # JSON context from calling plugin
-DS_TRACE_ID                  # Trace ID for request tracing
-```
-
-### Reading Configuration in Go
+#### Accessing Host Config in Go
 
 ```go
 package main
 
 import (
-    "encoding/json"
-    "os"
-    "time"
+    "context"
+    "fmt"
+
+    "github.com/delivery-station/ds/pkg/types"
 )
 
-type Config struct {
-    Registry     string
-    CacheDir     string
-    CacheTTL     time.Duration
-    LogLevel     string
-}
+func execute(ctx context.Context) error {
+    provider, ok := types.HostConfigFromContext(ctx)
+    if !ok {
+        return fmt.Errorf("host configuration provider unavailable")
+    }
 
-func loadConfig() (*Config, error) {
-    cfg := &Config{
-        Registry: os.Getenv("DS_REGISTRY_DEFAULT"),
-        CacheDir: os.Getenv("DS_CACHE_DIR"),
-        LogLevel: os.Getenv("DS_LOGGING_LEVEL"),
+    cfg, err := provider.GetEffectiveConfig(ctx)
+    if err != nil {
+        return fmt.Errorf("fetching host configuration: %w", err)
     }
-    
-    // Parse TTL
-    ttlStr := os.Getenv("DS_CACHE_TTL")
-    if ttlStr != "" {
-        ttl, err := time.ParseDuration(ttlStr)
-        if err != nil {
-            return nil, err
-        }
-        cfg.CacheTTL = ttl
-    }
-    
-    return cfg, nil
+
+    fmt.Println("Default registry:", cfg.Registry.Default)
+    fmt.Println("Cache directory:", cfg.Cache.Dir)
+    return nil
 }
 ```
 
-### Reading Configuration in Python
+#### Other Languages
 
-```python
-import os
-import json
-
-class Config:
-    def __init__(self):
-        self.registry = os.getenv("DS_REGISTRY_DEFAULT", "ghcr.io")
-        self.cache_dir = os.getenv("DS_CACHE_DIR", "~/.cache/ds")
-        self.cache_ttl = os.getenv("DS_CACHE_TTL", "7d")
-        self.log_level = os.getenv("DS_LOGGING_LEVEL", "info")
-        
-        # Parse JSON arrays
-        mirrors = os.getenv("DS_REGISTRY_MIRRORS", "[]")
-        self.mirrors = json.loads(mirrors)
-
-config = Config()
-print(f"Using registry: {config.registry}")
-```
+Non-Go plugins can access the broker endpoint via gRPC. The `HostConfig` service is exposed under the broker ID provided in the `ExecuteRequest`. Refer to the [protocol definition](../pkg/plugin/plugin.proto) for request/response schemas.
 
 ## Testing Plugins
 
@@ -560,7 +406,6 @@ func main() {
     }
 
     fmt.Printf("Hello, %s!\n", name)
-    fmt.Printf("Running from DS in %s\n", os.Getenv("DS_PLUGINS_DIR"))
 }
 ```
 
@@ -660,27 +505,41 @@ if err != nil {
 
 ### 2. Logging
 
-- Respect `DS_LOGGING_LEVEL`
+- Respect logging preferences from the host configuration
 - Use structured logging
 - Don't log sensitive data
 
 ```go
-logLevel := os.Getenv("DS_LOGGING_LEVEL")
-if logLevel == "debug" {
-    fmt.Fprintf(os.Stderr, "DEBUG: Connecting to %s\n", registry)
+provider, ok := types.HostConfigFromContext(ctx)
+if ok {
+    if cfg, err := provider.GetEffectiveConfig(ctx); err == nil {
+        logger.With("level", cfg.Logging.Level).Debug("Connecting to registry", "registry", registry)
+    }
 }
 ```
 
 ### 3. Configuration
 
-- Always read from DS environment variables
-- Provide sensible defaults
-- Validate configuration
+- Always read from the host configuration provider
+- Provide sensible defaults when fields are empty
+- Validate configuration before use
 
 ```go
-cacheDir := os.Getenv("DS_CACHE_DIR")
-if cacheDir == "" {
-    cacheDir = filepath.Join(os.Getenv("HOME"), ".cache", "ds")
+provider, ok := types.HostConfigFromContext(ctx)
+if !ok {
+    return fmt.Errorf("host configuration unavailable")
+}
+
+cfg, err := provider.GetEffectiveConfig(ctx)
+if err != nil {
+    return fmt.Errorf("fetch host configuration: %w", err)
+}
+
+cacheDir := cfg.Cache.Dir
+if strings.TrimSpace(cacheDir) == "" {
+    if userCache, uErr := os.UserCacheDir(); uErr == nil {
+        cacheDir = filepath.Join(userCache, "ds", "my-plugin")
+    }
 }
 ```
 
@@ -718,18 +577,18 @@ fmt.Printf("Downloading... 100%%\n")
 
 **Solution**:
 - Verify binary name: Must be `ds-<plugin-name>`
-- Check location: Should be in `DS_PLUGINS_DIR`
+- Check location: Place binary in the configured plugin directory (default `~/.config/ds/plugins`)
 - Verify permissions: Must be executable (`chmod +x`)
 - Check manifest: Should be in same directory
 
 ### Configuration Not Available
 
-**Problem**: Environment variables are empty
+**Problem**: Host configuration is not accessible inside the plugin
 
 **Solution**:
-- Test outside DS first: Set variables manually
-- Check DS config: `ds config show`
-- Verify DS version: `ds --version`
+- Ensure the plugin requests the Host Config provider from `types.HostConfigFromContext`
+- Confirm DS is up to date (`ds --version`) and supports the Host Config service
+- Run `ds config show` to verify configuration is valid
 - Enable debug logging: `ds --log-level debug plugin list`
 
 ### Plugin Crashes
@@ -740,7 +599,7 @@ fmt.Printf("Downloading... 100%%\n")
 - Test standalone: Run binary directly
 - Check dependencies: Verify required files exist
 - Review logs: Look for error messages
-- Add debug output: Print environment variables
+- Add debug output: Log received arguments and host configuration details (without secrets)
 
 ## Resources
 

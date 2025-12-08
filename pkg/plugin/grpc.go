@@ -2,7 +2,9 @@ package plugin
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"sync"
 
 	"github.com/delivery-station/ds/pkg/types"
 	"github.com/hashicorp/go-plugin"
@@ -29,17 +31,18 @@ type DSPlugin struct {
 }
 
 func (p *DSPlugin) GRPCServer(broker *plugin.GRPCBroker, s *grpc.Server) error {
-	RegisterDSPluginServer(s, &GRPCServer{Impl: p.Impl})
+	RegisterDSPluginServer(s, &GRPCServer{Impl: p.Impl, broker: broker})
 	return nil
 }
 
 func (p *DSPlugin) GRPCClient(ctx context.Context, broker *plugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
-	return &GRPCClient{client: NewDSPluginClient(c)}, nil
+	return &GRPCClient{client: NewDSPluginClient(c), broker: broker}, nil
 }
 
 // GRPCClient is an implementation of PluginProtocol that talks over RPC
 type GRPCClient struct {
 	client DSPluginClient
+	broker *plugin.GRPCBroker
 }
 
 func (m *GRPCClient) GetMetadata(ctx context.Context) (*types.PluginMetadata, error) {
@@ -62,10 +65,34 @@ func (m *GRPCClient) GetMetadata(ctx context.Context) (*types.PluginMetadata, er
 }
 
 func (m *GRPCClient) Execute(ctx context.Context, operation string, args []string, env map[string]string) (*types.ExecutionResult, error) {
+	var brokerID uint32
+
+	if m.broker != nil {
+		if cfg, ok := types.HostConfigPayloadFromContext(ctx); ok && cfg != nil {
+			brokerID = m.broker.NextId()
+
+			server := &hostConfigServer{config: cfg}
+			go m.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
+				grpcServer := grpc.NewServer(opts...)
+				RegisterHostConfigServer(grpcServer, server)
+				return grpcServer
+			})
+
+			ctx = types.WithHostConfigBrokerID(ctx, brokerID)
+		}
+	}
+
+	if brokerID == 0 {
+		if id, ok := types.HostConfigBrokerIDFromContext(ctx); ok {
+			brokerID = id
+		}
+	}
+
 	resp, err := m.client.Execute(ctx, &ExecuteRequest{
-		Operation: operation,
-		Args:      args,
-		Env:       env,
+		Operation:          operation,
+		Args:               args,
+		Env:                env,
+		HostConfigBrokerId: brokerID,
 	})
 	if err != nil {
 		return nil, err
@@ -123,7 +150,8 @@ func (m *GRPCClient) GetSchema(ctx context.Context) (*types.PluginSchema, error)
 // GRPCServer is the gRPC server that GRPCClient talks to
 type GRPCServer struct {
 	UnimplementedDSPluginServer
-	Impl types.PluginProtocol
+	Impl   types.PluginProtocol
+	broker *plugin.GRPCBroker
 }
 
 func (m *GRPCServer) GetMetadata(ctx context.Context, req *GetMetadataRequest) (*GetMetadataResponse, error) {
@@ -145,6 +173,11 @@ func (m *GRPCServer) GetMetadata(ctx context.Context, req *GetMetadataRequest) (
 }
 
 func (m *GRPCServer) Execute(ctx context.Context, req *ExecuteRequest) (*ExecuteResponse, error) {
+	if req.HostConfigBrokerId != 0 && m.broker != nil {
+		provider := newHostConfigClient(m.broker, req.HostConfigBrokerId)
+		ctx = types.WithHostConfigProvider(ctx, provider)
+	}
+
 	res, err := m.Impl.Execute(ctx, req.Operation, req.Args, req.Env)
 	if err != nil {
 		return nil, err
@@ -190,4 +223,75 @@ func (m *GRPCServer) GetSchema(ctx context.Context, req *GetSchemaRequest) (*Get
 		Version:    schema.Version,
 		Properties: props,
 	}, nil
+}
+
+type brokerHostConfigClient struct {
+	broker *plugin.GRPCBroker
+	id     uint32
+
+	mu     sync.Mutex
+	client HostConfigClient
+}
+
+func newHostConfigClient(broker *plugin.GRPCBroker, id uint32) *brokerHostConfigClient {
+	return &brokerHostConfigClient{broker: broker, id: id}
+}
+
+func (c *brokerHostConfigClient) ensureClient() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.client != nil {
+		return nil
+	}
+
+	conn, err := c.broker.Dial(c.id)
+	if err != nil {
+		return fmt.Errorf("failed to dial host config broker: %w", err)
+	}
+
+	c.client = NewHostConfigClient(conn)
+	return nil
+}
+
+func (c *brokerHostConfigClient) GetEffectiveConfig(ctx context.Context) (*types.Config, error) {
+	if err := c.ensureClient(); err != nil {
+		return nil, err
+	}
+
+	resp, err := c.client.GetEffectiveConfig(ctx, &GetEffectiveConfigRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("host config request failed: %w", err)
+	}
+
+	if len(resp.ConfigJson) == 0 {
+		return nil, fmt.Errorf("host returned empty config payload")
+	}
+
+	var cfg types.Config
+	if err := json.Unmarshal(resp.ConfigJson, &cfg); err != nil {
+		return nil, fmt.Errorf("failed to decode host config: %w", err)
+	}
+
+	return &cfg, nil
+}
+
+var _ types.HostConfigProvider = (*brokerHostConfigClient)(nil)
+
+type hostConfigServer struct {
+	UnimplementedHostConfigServer
+	config *types.Config
+}
+
+func (s *hostConfigServer) GetEffectiveConfig(ctx context.Context, _ *GetEffectiveConfigRequest) (*GetEffectiveConfigResponse, error) {
+	if s.config == nil {
+		return nil, fmt.Errorf("host configuration not available")
+	}
+
+	payload, err := json.Marshal(s.config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode host configuration: %w", err)
+	}
+
+	return &GetEffectiveConfigResponse{ConfigJson: payload}, nil
 }

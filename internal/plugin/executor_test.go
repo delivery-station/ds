@@ -5,12 +5,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
+	"sort"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/spf13/viper"
 )
 
 // buildTestPlugin creates a real executable plugin for testing
@@ -74,7 +74,7 @@ func buildTestPlugin(t *testing.T, dir, name, sourceCode string) string {
 func TestNewExecutor(t *testing.T) {
 	tmpDir := t.TempDir()
 	mgr := NewManager(tmpDir)
-	executor := NewExecutor(mgr)
+	executor := NewExecutor(mgr, nil)
 
 	if executor == nil {
 		t.Fatal("NewExecutor returned nil")
@@ -92,7 +92,7 @@ func TestNewExecutor(t *testing.T) {
 func TestSetTimeout(t *testing.T) {
 	tmpDir := t.TempDir()
 	mgr := NewManager(tmpDir)
-	executor := NewExecutor(mgr)
+	executor := NewExecutor(mgr, nil)
 
 	newTimeout := 10 * time.Second
 	executor.SetTimeout(newTimeout)
@@ -105,44 +105,27 @@ func TestSetTimeout(t *testing.T) {
 func TestPrepareEnvironment(t *testing.T) {
 	tmpDir := t.TempDir()
 	mgr := NewManager(tmpDir)
-	executor := NewExecutor(mgr)
+	executor := NewExecutor(mgr, nil)
 
-	// Set some viper values
-	viper.Set("registry.default", "test.registry.io")
-	viper.Set("cache.dir", "/tmp/test-cache")
-	viper.Set("plugins.dir", tmpDir)
-	defer viper.Reset()
-
-	env := executor.PrepareEnvironment()
-
-	// Check that environment contains DS_* variables
-	found := make(map[string]bool)
-	for _, e := range env {
-		if strings.HasPrefix(e, "DS_") {
-			parts := strings.SplitN(e, "=", 2)
-			if len(parts) == 2 {
-				found[parts[0]] = true
-			}
-		}
+	env := executor.PrepareEnvironment("test-plugin")
+	if len(env) == 0 {
+		t.Fatal("expected env vars to be set")
 	}
 
-	expectedVars := []string{"DS_REGISTRY_DEFAULT", "DS_CACHE_DIR", "DS_PLUGIN_DIR"}
-	for _, expectedVar := range expectedVars {
-		if !found[expectedVar] {
-			t.Errorf("expected environment variable %s not found", expectedVar)
-		}
-	}
+	expected := os.Environ()
 
-	// Check that we have more than just DS_ vars (should include system env)
-	if len(env) < 10 {
-		t.Errorf("expected at least 10 env vars, got %d", len(env))
+	sort.Strings(env)
+	sort.Strings(expected)
+
+	if !reflect.DeepEqual(env, expected) {
+		t.Fatalf("environment mismatch: expected %v, got %v", expected, env)
 	}
 }
 
 func TestExecutePlugin_NotFound(t *testing.T) {
 	tmpDir := t.TempDir()
 	mgr := NewManager(tmpDir)
-	executor := NewExecutor(mgr)
+	executor := NewExecutor(mgr, nil)
 
 	exitCode, err := executor.ExecutePlugin("nonexistent", []string{"test"})
 
@@ -216,7 +199,7 @@ func main() {
 	}
 
 	mgr := NewManager(tmpDir)
-	executor := NewExecutor(mgr)
+	executor := NewExecutor(mgr, nil)
 
 	// Discover plugins
 	if err := mgr.DiscoverPlugins(); err != nil {
@@ -291,7 +274,7 @@ func main() {
 	}
 
 	mgr := NewManager(tmpDir)
-	executor := NewExecutor(mgr)
+	executor := NewExecutor(mgr, nil)
 
 	if err := mgr.DiscoverPlugins(); err != nil {
 		t.Fatalf("failed to discover plugins: %v", err)
@@ -366,7 +349,7 @@ func main() {
 	}
 
 	mgr := NewManager(tmpDir)
-	executor := NewExecutor(mgr)
+	executor := NewExecutor(mgr, nil)
 
 	if err := mgr.DiscoverPlugins(); err != nil {
 		t.Fatalf("failed to discover plugins: %v", err)
@@ -453,7 +436,7 @@ func main() {
 	}
 
 	mgr := NewManager(tmpDir)
-	executor := NewExecutor(mgr)
+	executor := NewExecutor(mgr, nil)
 	executor.SetTimeout(1 * time.Second) // Short timeout
 
 	if err := mgr.DiscoverPlugins(); err != nil {

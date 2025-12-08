@@ -12,6 +12,11 @@ service DSPlugin {
   rpc GetSchema(GetSchemaRequest) returns (GetSchemaResponse);
 }
 
+// HostConfig exposes host-provided configuration to plugins over the gRPC broker
+service HostConfig {
+  rpc GetEffectiveConfig(GetEffectiveConfigRequest) returns (GetEffectiveConfigResponse);
+}
+
 message GetMetadataRequest {}
 
 message GetMetadataResponse {
@@ -32,6 +37,7 @@ message ExecuteRequest {
   string operation = 1;
   repeated string args = 2;
   map<string, string> env = 3;
+  uint32 host_config_broker_id = 4;
 }
 
 message ExecuteResponse {
@@ -62,4 +68,10 @@ message SchemaProperty {
   string description = 2;
   bool required = 3;
   string default = 4;
+}
+
+message GetEffectiveConfigRequest {}
+
+message GetEffectiveConfigResponse {
+  bytes config_json = 1;
 }

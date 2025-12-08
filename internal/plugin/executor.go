@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/delivery-station/ds/pkg/log"
-	"github.com/spf13/viper"
 
 	pkgplugin "github.com/delivery-station/ds/pkg/plugin"
 	"github.com/delivery-station/ds/pkg/types"
@@ -20,13 +19,15 @@ import (
 // Executor handles plugin execution
 type Executor struct {
 	manager *Manager
+	config  *types.Config
 	timeout time.Duration
 }
 
 // NewExecutor creates a new plugin executor
-func NewExecutor(manager *Manager) *Executor {
+func NewExecutor(manager *Manager, cfg *types.Config) *Executor {
 	return &Executor{
 		manager: manager,
+		config:  cfg,
 		timeout: 5 * time.Minute, // Default 5 minute timeout
 	}
 }
@@ -87,7 +88,7 @@ func (e *Executor) ExecutePlugin(pluginName string, args []string) (int, error) 
 
 	// Prepare environment
 	envMap := make(map[string]string)
-	env := e.PrepareEnvironment()
+	env := e.PrepareEnvironment(pluginName)
 	for _, e := range env {
 		parts := strings.SplitN(e, "=", 2)
 		if len(parts) == 2 {
@@ -97,6 +98,9 @@ func (e *Executor) ExecutePlugin(pluginName string, args []string) (int, error) 
 
 	// Execute
 	ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
+	if e.config != nil {
+		ctx = types.WithHostConfigPayload(ctx, e.config)
+	}
 	defer cancel()
 
 	// The first arg is the operation (e.g. "fetch"), the rest are args
@@ -130,39 +134,11 @@ func (e *Executor) ExecutePlugin(pluginName string, args []string) (int, error) 
 }
 
 // PrepareEnvironment prepares environment variables for plugin execution
-func (e *Executor) PrepareEnvironment() []string {
+func (e *Executor) PrepareEnvironment(pluginName string) []string {
 	// Start with current environment
-	env := os.Environ()
+	env := append([]string{}, os.Environ()...)
 
-	// Add all DS_* variables from viper config
-	allSettings := viper.AllSettings()
-	for key, value := range allSettings {
-		envKey := "DS_" + strings.ToUpper(strings.ReplaceAll(key, ".", "_"))
-		envValue := fmt.Sprintf("%v", value)
-		env = append(env, fmt.Sprintf("%s=%s", envKey, envValue))
-	}
-
-	// Add specific DS variables
-	if configFile := viper.ConfigFileUsed(); configFile != "" {
-		env = append(env, fmt.Sprintf("DS_CONFIG=%s", configFile))
-	}
-
-	// Add cache directory
-	if cacheDir := viper.GetString("cache.dir"); cacheDir != "" {
-		env = append(env, fmt.Sprintf("DS_CACHE_DIR=%s", cacheDir))
-	}
-
-	// Add plugin directory
-	if pluginDir := viper.GetString("plugins.dir"); pluginDir != "" {
-		env = append(env, fmt.Sprintf("DS_PLUGIN_DIR=%s", pluginDir))
-	}
-
-	// Add registry default
-	if registry := viper.GetString("registry.default"); registry != "" {
-		env = append(env, fmt.Sprintf("DS_REGISTRY_DEFAULT=%s", registry))
-	}
-
-	log.Debug("Prepared environment variables for plugin", "count", len(env))
+	log.Debug("Prepared environment variables for plugin", "plugin", pluginName, "count", len(env))
 
 	return env
 }
@@ -242,7 +218,7 @@ func (e *Executor) ExecutePluginWithOutput(pluginName string, args []string) (st
 
 	// Prepare environment
 	envMap := make(map[string]string)
-	env := e.PrepareEnvironment()
+	env := e.PrepareEnvironment(pluginName)
 	for _, e := range env {
 		parts := strings.SplitN(e, "=", 2)
 		if len(parts) == 2 {
@@ -252,6 +228,9 @@ func (e *Executor) ExecutePluginWithOutput(pluginName string, args []string) (st
 
 	// Execute
 	ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
+	if e.config != nil {
+		ctx = types.WithHostConfigPayload(ctx, e.config)
+	}
 	defer cancel()
 
 	// The first arg is the operation (e.g. "fetch"), the rest are args

@@ -99,7 +99,7 @@ DS supports multiple configuration sources with the following precedence:
 # Registry configuration
 registry:
   # The default entry can include a namespace (e.g. ghcr.io/delivery-station)
-  default: "ghcr.io"
+  default: "ghcr.io/delivery-station"
   mirrors:
     - "registry.example.com"
   insecure_registries: []
@@ -131,7 +131,7 @@ plugins:
 All configuration values can be set via environment variables with the `DS_` prefix:
 
 ```bash
-export DS_REGISTRY_DEFAULT=ghcr.io
+export DS_REGISTRY_DEFAULT=ghcr.io/delivery-station
 export DS_AUTH_DOCKER_CONFIG=~/.docker/config.json
 export DS_CACHE_DIR=~/.cache/ds
 export DS_LOGGING_LEVEL=debug

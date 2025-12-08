@@ -96,7 +96,7 @@ If you're new to DS, we recommend reading in this order:
 DS is a **meta-application** - it doesn't directly handle artifacts. Instead, it manages plugins that do the actual work. Think of it like Terraform managing providers.
 
 ### Configuration Inheritance
-All plugins inherit DS configuration automatically via environment variables. This provides a consistent experience across all tools in the ecosystem.
+All plugins receive DS configuration automatically through the Host Config gRPC service. DS resolves configuration precedence (flags, environment, files) on the host and supplies the effective values directly to plugins, eliminating ad-hoc environment parsing and keeping behavior consistent across the ecosystem.
 
 ### OCI-Native
 Everything in DS is distributed as OCI artifacts:
@@ -122,4 +122,4 @@ Found an issue in the documentation? Have a suggestion for improvement?
 
 ---
 
-**Last Updated**: 2025-11-25
+**Last Updated**: 2025-12-08

@@ -212,7 +212,7 @@ func TestLoadConfig(t *testing.T) {
         {
             name: "valid config",
             path: "testdata/valid.yaml",
-            want: &Config{Registry: "ghcr.io"},
+            want: &Config{Registry: "ghcr.io/delivery-station"},
             wantErr: false,
         },
         {

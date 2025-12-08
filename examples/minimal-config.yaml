@@ -3,7 +3,7 @@
 
 # Registry Configuration
 registry:
-  default: "ghcr.io"
+  default: "ghcr.io/delivery-station"
 
 # Authentication
 auth:

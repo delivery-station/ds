@@ -33,7 +33,7 @@ DS supports both YAML and TOML formats. Examples below use YAML.
 registry:
   # Default registry for plugin and artifact operations
   # Registry can include an optional namespace prefix (e.g. ghcr.io/delivery-station)
-  default: "ghcr.io"
+  default: "ghcr.io/delivery-station"
   
   # Alternative registries to try if default fails
   mirrors:
@@ -53,7 +53,7 @@ auth:
   
   # Explicit credentials (alternative to docker_config)
   credentials:
-    - registry: "ghcr.io"
+    - registry: "ghcr.io/delivery-station"
       username: "myuser"
       password: "${GITHUB_TOKEN}"  # Variable expansion
     - registry: "registry.example.com"
@@ -147,7 +147,7 @@ All configuration values can be set via environment variables using the `DS_` pr
 ### Registry Settings
 
 ```bash
-export DS_REGISTRY_DEFAULT=ghcr.io
+export DS_REGISTRY_DEFAULT=ghcr.io/delivery-station
 export DS_REGISTRY_MIRRORS_0=registry.example.com
 export DS_REGISTRY_MIRRORS_1=mirror.company.net
 export DS_REGISTRY_INSECURE_REGISTRIES_0=localhost:5000
@@ -157,7 +157,7 @@ export DS_REGISTRY_INSECURE_REGISTRIES_0=localhost:5000
 
 ```bash
 export DS_AUTH_DOCKER_CONFIG=~/.docker/config.json
-export DS_AUTH_CREDENTIALS_0_REGISTRY=ghcr.io
+export DS_AUTH_CREDENTIALS_0_REGISTRY=ghcr.io/delivery-station
 export DS_AUTH_CREDENTIALS_0_USERNAME=myuser
 export DS_AUTH_CREDENTIALS_0_PASSWORD=ghp_token123
 ```
@@ -212,7 +212,7 @@ ds --log-level debug                # Set log level
 ds --plugin-dir /custom/plugins     # Custom plugin directory
 ds --no-color                       # Disable colored output
 ds --cache-dir /custom/cache        # Custom cache directory
-ds --registry ghcr.io               # Default registry
+ds --registry ghcr.io/delivery-station # Default registry
 ```
 
 ## Configuration Examples
@@ -223,7 +223,7 @@ Suitable for getting started quickly:
 
 ```yaml
 registry:
-  default: "ghcr.io"
+  default: "ghcr.io/delivery-station"
 
 auth:
   docker_config: "~/.docker/config.json"
@@ -319,7 +319,7 @@ DS supports environment variable expansion in configuration values using `${VAR}
 ```yaml
 auth:
   credentials:
-    - registry: "ghcr.io"
+    - registry: "ghcr.io/delivery-station"
       username: "myuser"
       password: "${GITHUB_TOKEN}"
 
@@ -335,7 +335,7 @@ Default values are supported with `${VAR:-default}` syntax:
 
 ```yaml
 registry:
-  default: "${DS_REGISTRY:-ghcr.io}"
+  default: "${DS_REGISTRY:-ghcr.io/delivery-station}"
 
 cache:
   max_size: "${DS_CACHE_SIZE:-10GB}"
@@ -426,7 +426,7 @@ Specify credentials directly:
 ```yaml
 auth:
   credentials:
-    - registry: "ghcr.io"
+    - registry: "ghcr.io/delivery-station"
       username: "myuser"
       password: "${GITHUB_TOKEN}"
     - registry: "registry.example.com"
@@ -516,7 +516,7 @@ auth:
 
 **Solution**: Environment variables always override config file. Check:
 1. Variable name matches format: `DS_SECTION_KEY`
-2. Variable is exported: `export DS_REGISTRY_DEFAULT=ghcr.io`
+2. Variable is exported: `export DS_REGISTRY_DEFAULT=ghcr.io/delivery-station`
 3. View effective config: `ds config show`
 
 ## Security Best Practices
