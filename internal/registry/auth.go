@@ -2,8 +2,11 @@ package registry
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,9 +21,10 @@ type DockerConfig struct {
 
 // DockerAuth represents authentication for a registry
 type DockerAuth struct {
-	Auth     string `json:"auth,omitempty"`
-	Username string `json:"username,omitempty"`
-	Password string `json:"password,omitempty"`
+	Auth          string `json:"auth,omitempty"`
+	Username      string `json:"username,omitempty"`
+	Password      string `json:"password,omitempty"`
+	IdentityToken string `json:"identitytoken,omitempty"`
 }
 
 // Credentials represents registry credentials
@@ -44,30 +48,35 @@ func NewAuthProvider() *AuthProvider {
 	}
 }
 
-// LoadDockerConfig loads credentials from ~/.docker/config.json
+// LoadDockerConfig loads credentials from the default Docker config path.
 func (a *AuthProvider) LoadDockerConfig() error {
-	configPath := filepath.Join(os.Getenv("HOME"), ".docker", "config.json")
+	return a.LoadDockerConfigFrom("")
+}
 
-	// Check if file exists
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		log.Debug("Docker config.json not found, skipping")
-		return nil
+// LoadDockerConfigFrom loads Docker credentials from the provided config path.
+// When path is empty, the default ~/.docker/config.json is used.
+func (a *AuthProvider) LoadDockerConfigFrom(path string) error {
+	configPath := resolveDockerConfigPath(path)
+	if configPath == "" {
+		configPath = filepath.Join(os.Getenv("HOME"), ".docker", "config.json")
 	}
 
-	// Read file
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		return fmt.Errorf("failed to read docker config: %w", err)
+		if errors.Is(err, fs.ErrNotExist) {
+			log.Debug("Docker config.json not found, skipping", "path", configPath)
+			return nil
+		}
+		return fmt.Errorf("failed to read docker config %s: %w", configPath, err)
 	}
 
-	// Parse JSON
 	var config DockerConfig
 	if err := json.Unmarshal(data, &config); err != nil {
-		return fmt.Errorf("failed to parse docker config: %w", err)
+		return fmt.Errorf("failed to parse docker config %s: %w", configPath, err)
 	}
 
 	a.dockerConfig = &config
-	log.Debug("Loaded Docker config", "registries", len(config.Auths))
+	log.Debug("Loaded Docker config", "path", configPath, "registries", len(config.Auths))
 
 	return nil
 }
@@ -93,20 +102,29 @@ func (a *AuthProvider) GetCredentials(registry string) (*Credentials, error) {
 	// Check Docker config
 	if a.dockerConfig != nil {
 		if auth, ok := a.dockerConfig.Auths[normalized]; ok {
-			cred := &Credentials{
-				Registry: registry,
+			cred := &Credentials{Registry: registry}
+
+			if auth.Auth != "" {
+				username, password, err := decodeDockerAuth(auth.Auth)
+				if err != nil {
+					log.Warn("Failed to decode docker auth entry", "registry", registry, "error", err)
+				} else {
+					cred.Username = username
+					cred.Password = password
+				}
 			}
 
-			// Try different auth formats
-			if auth.Auth != "" {
-				// Base64 encoded username:password
-				cred.Token = auth.Auth
-			} else if auth.Username != "" && auth.Password != "" {
+			if cred.Username == "" && auth.Username != "" && auth.Password != "" {
 				cred.Username = auth.Username
 				cred.Password = auth.Password
 			}
 
-			if cred.Token != "" || cred.Username != "" {
+			if cred.Username == "" && auth.IdentityToken != "" {
+				cred.Username = "token"
+				cred.Password = auth.IdentityToken
+			}
+
+			if cred.Username != "" || cred.Password != "" {
 				log.Debug("Using Docker config credentials", "registry", registry)
 				return cred, nil
 			}
@@ -142,6 +160,41 @@ func normalizeRegistry(registry string) string {
 	}
 
 	return registry
+}
+
+func resolveDockerConfigPath(path string) string {
+	trimmed := strings.TrimSpace(path)
+	if trimmed == "" {
+		return ""
+	}
+
+	if strings.HasPrefix(trimmed, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, trimmed[2:])
+		}
+	}
+
+	return trimmed
+}
+
+func decodeDockerAuth(encoded string) (string, string, error) {
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(encoded))
+	if err != nil {
+		return "", "", err
+	}
+
+	parts := strings.SplitN(string(decoded), ":", 2)
+	if len(parts) == 0 {
+		return "", "", fmt.Errorf("docker auth payload empty")
+	}
+
+	username := parts[0]
+	password := ""
+	if len(parts) == 2 {
+		password = parts[1]
+	}
+
+	return username, password, nil
 }
 
 // RefreshToken refreshes an expired token (placeholder for future implementation)

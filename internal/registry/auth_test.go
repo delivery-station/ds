@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -229,6 +230,35 @@ func TestGetCredentials_FromDockerConfig(t *testing.T) {
 
 	if cred.Username != "dockeruser" {
 		t.Errorf("expected username 'dockeruser', got '%s'", cred.Username)
+	}
+}
+
+func TestGetCredentials_FromDockerConfigAuthField(t *testing.T) {
+	provider := NewAuthProvider()
+
+	encoded := base64.StdEncoding.EncodeToString([]byte("runner:gh_token"))
+	provider.dockerConfig = &DockerConfig{
+		Auths: map[string]DockerAuth{
+			"ghcr.io": {
+				Auth: encoded,
+			},
+		},
+	}
+
+	cred, err := provider.GetCredentials("ghcr.io")
+	if err != nil {
+		t.Fatalf("GetCredentials failed: %v", err)
+	}
+
+	if cred == nil {
+		t.Fatal("expected credentials from docker config auth field")
+	}
+
+	if cred.Username != "runner" {
+		t.Errorf("expected username runner, got %s", cred.Username)
+	}
+	if cred.Password != "gh_token" {
+		t.Errorf("expected password gh_token, got %s", cred.Password)
 	}
 }
 

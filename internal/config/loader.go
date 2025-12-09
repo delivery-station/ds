@@ -1,7 +1,11 @@
 package config
 
 import (
+	"encoding/base64"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -70,6 +74,11 @@ func (l *Loader) Load() (*types.Config, error) {
 	// Expand variables
 	if err := l.expandVariables(&config); err != nil {
 		return nil, fmt.Errorf("failed to expand variables: %w", err)
+	}
+
+	// Merge Docker credentials (best-effort)
+	if err := l.mergeDockerCredentials(&config); err != nil {
+		log.Warn("Failed to merge Docker credentials", "error", err)
 	}
 
 	// Validate configuration
@@ -207,6 +216,131 @@ func (l *Loader) expandString(s string) string {
 	}
 
 	return s
+}
+
+func (l *Loader) mergeDockerCredentials(cfg *types.Config) error {
+	if cfg == nil {
+		return nil
+	}
+
+	path := strings.TrimSpace(cfg.Auth.DockerConfig)
+	if path == "" {
+		return nil
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			log.Debug("Docker config file not found", "path", path)
+			return nil
+		}
+		return fmt.Errorf("failed to read docker config %s: %w", path, err)
+	}
+
+	var dockerCfg dockerConfig
+	if err := json.Unmarshal(data, &dockerCfg); err != nil {
+		return fmt.Errorf("failed to parse docker config %s: %w", path, err)
+	}
+
+	if len(dockerCfg.Auths) == 0 {
+		return nil
+	}
+
+	existing := make(map[string]int)
+	for idx, cred := range cfg.Auth.Credentials {
+		normalized := normalizeRegistryHost(cred.Registry)
+		if normalized != "" {
+			existing[normalized] = idx
+		}
+	}
+
+	for registryHost, entry := range dockerCfg.Auths {
+		normalized := normalizeRegistryHost(registryHost)
+		if normalized == "" {
+			continue
+		}
+
+		if _, found := existing[normalized]; found {
+			continue
+		}
+
+		username := strings.TrimSpace(entry.Username)
+		password := entry.Password
+
+		if username == "" && password == "" && entry.Auth != "" {
+			user, pass, decodeErr := decodeDockerAuth(entry.Auth)
+			if decodeErr != nil {
+				log.Warn("Failed to decode docker auth entry", "registry", registryHost, "error", decodeErr)
+			} else {
+				username = user
+				password = pass
+			}
+		}
+
+		if username == "" && entry.IdentityToken != "" {
+			username = "token"
+			password = entry.IdentityToken
+		}
+
+		if username == "" && password == "" {
+			continue
+		}
+
+		cfg.Auth.Credentials = append(cfg.Auth.Credentials, types.Credential{
+			Registry: registryHost,
+			Username: username,
+			Password: password,
+		})
+		existing[normalized] = len(cfg.Auth.Credentials) - 1
+		log.Debug("Added Docker credential from config", "registry", registryHost)
+	}
+
+	return nil
+}
+
+type dockerConfig struct {
+	Auths map[string]dockerAuth `json:"auths"`
+}
+
+type dockerAuth struct {
+	Auth          string `json:"auth,omitempty"`
+	Username      string `json:"username,omitempty"`
+	Password      string `json:"password,omitempty"`
+	IdentityToken string `json:"identitytoken,omitempty"`
+}
+
+func normalizeRegistryHost(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return ""
+	}
+	trimmed = strings.TrimPrefix(trimmed, "https://")
+	trimmed = strings.TrimPrefix(trimmed, "http://")
+	trimmed = strings.TrimSuffix(trimmed, "/")
+	if trimmed == "docker.io" || trimmed == "index.docker.io" {
+		return "https://index.docker.io/v1/"
+	}
+	return trimmed
+}
+
+func decodeDockerAuth(encoded string) (string, string, error) {
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(encoded))
+	if err != nil {
+		return "", "", err
+	}
+
+	parts := strings.SplitN(string(decoded), ":", 2)
+	if len(parts) == 0 {
+		return "", "", fmt.Errorf("docker auth payload empty")
+	}
+
+	username := parts[0]
+	password := ""
+	if len(parts) == 2 {
+		password = parts[1]
+	}
+
+	return username, password, nil
 }
 
 // Validate validates the configuration

@@ -90,7 +90,7 @@ func runPluginInstall(cmd *cobra.Command, args []string) error {
 
 	// Set up authentication
 	authProvider := registry.NewAuthProvider()
-	if err := authProvider.LoadDockerConfig(); err != nil {
+	if err := authProvider.LoadDockerConfigFrom(cfg.Auth.DockerConfig); err != nil {
 		log.Warn("Failed to load Docker config", "error", err)
 	}
 
@@ -146,7 +146,7 @@ func runPluginUpdate(cmd *cobra.Command, args []string) error {
 
 	// Set up authentication
 	authProvider := registry.NewAuthProvider()
-	if err := authProvider.LoadDockerConfig(); err != nil {
+	if err := authProvider.LoadDockerConfigFrom(cfg.Auth.DockerConfig); err != nil {
 		log.Warn("Failed to load Docker config", "error", err)
 	}
 

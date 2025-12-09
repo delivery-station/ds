@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"testing"
@@ -237,6 +238,84 @@ cache:
 	// Check that defaults are still used for non-overridden values
 	if v.GetString("logging.format") != "text" {
 		t.Errorf("expected logging.format from defaults, got %s", v.GetString("logging.format"))
+	}
+}
+
+func TestMergeDockerCredentialsAddsEntries(t *testing.T) {
+	tmpDir := t.TempDir()
+	dockerPath := filepath.Join(tmpDir, "config.json")
+
+	authPayload := base64.StdEncoding.EncodeToString([]byte("runner:gh_secret"))
+	content := []byte(`{"auths":{"ghcr.io":{"auth":"` + authPayload + `"}}}`)
+
+	if err := os.WriteFile(dockerPath, content, 0600); err != nil {
+		t.Fatalf("failed to write docker config: %v", err)
+	}
+
+	loader := &Loader{viper: viper.New()}
+	cfg := &types.Config{
+		Auth: types.AuthConfig{DockerConfig: dockerPath},
+	}
+
+	if err := loader.mergeDockerCredentials(cfg); err != nil {
+		t.Fatalf("mergeDockerCredentials returned error: %v", err)
+	}
+
+	if len(cfg.Auth.Credentials) != 1 {
+		t.Fatalf("expected 1 credential, got %d", len(cfg.Auth.Credentials))
+	}
+
+	cred := cfg.Auth.Credentials[0]
+	if cred.Registry != "ghcr.io" {
+		t.Errorf("expected registry ghcr.io, got %s", cred.Registry)
+	}
+	if cred.Username != "runner" {
+		t.Errorf("expected username runner, got %s", cred.Username)
+	}
+	if cred.Password != "gh_secret" {
+		t.Errorf("expected password gh_secret, got %s", cred.Password)
+	}
+}
+
+func TestMergeDockerCredentialsDoesNotOverrideExisting(t *testing.T) {
+	tmpDir := t.TempDir()
+	dockerPath := filepath.Join(tmpDir, "config.json")
+
+	authPayload := base64.StdEncoding.EncodeToString([]byte("runner:new_secret"))
+	content := []byte(`{"auths":{"ghcr.io":{"auth":"` + authPayload + `"}}}`)
+
+	if err := os.WriteFile(dockerPath, content, 0600); err != nil {
+		t.Fatalf("failed to write docker config: %v", err)
+	}
+
+	loader := &Loader{viper: viper.New()}
+	cfg := &types.Config{
+		Auth: types.AuthConfig{
+			DockerConfig: dockerPath,
+			Credentials: []types.Credential{
+				{
+					Registry: "https://ghcr.io",
+					Username: "existing",
+					Password: "existing_secret",
+				},
+			},
+		},
+	}
+
+	if err := loader.mergeDockerCredentials(cfg); err != nil {
+		t.Fatalf("mergeDockerCredentials returned error: %v", err)
+	}
+
+	if len(cfg.Auth.Credentials) != 1 {
+		t.Fatalf("expected 1 credential, got %d", len(cfg.Auth.Credentials))
+	}
+
+	cred := cfg.Auth.Credentials[0]
+	if cred.Username != "existing" {
+		t.Errorf("expected username existing, got %s", cred.Username)
+	}
+	if cred.Password != "existing_secret" {
+		t.Errorf("expected password existing_secret, got %s", cred.Password)
 	}
 }
 
