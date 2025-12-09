@@ -116,6 +116,7 @@ func (l *Loader) LoadDefaults() {
 	l.viper.SetDefault("plugins.signature.allow_unsigned", true)
 	l.viper.SetDefault("plugins.signature.public_keys", []string{})
 	l.viper.SetDefault("plugins.signature.trust_store", filepath.Join(home, ".config", "ds", "trust"))
+	l.viper.SetDefault("plugins.settings", map[string]map[string]interface{}{})
 
 	// Auth defaults
 	l.viper.SetDefault("auth.docker_config", filepath.Join(home, ".docker", "config.json"))
@@ -183,7 +184,46 @@ func (l *Loader) expandVariables(config *types.Config) error {
 	config.Proxy.HTTPSProxy = l.expandString(config.Proxy.HTTPSProxy)
 	config.Proxy.NoProxy = l.expandString(config.Proxy.NoProxy)
 
+	// Expand plugin settings
+	l.expandPluginSettings(config.Plugins.Settings)
+
 	return nil
+}
+
+func (l *Loader) expandPluginSettings(settings map[string]map[string]interface{}) {
+	for plugin, values := range settings {
+		settings[plugin] = l.expandMap(values)
+	}
+}
+
+func (l *Loader) expandMap(values map[string]interface{}) map[string]interface{} {
+	if values == nil {
+		return nil
+	}
+	for key, value := range values {
+		values[key] = l.expandValue(value)
+	}
+	return values
+}
+
+func (l *Loader) expandSlice(items []interface{}) []interface{} {
+	for idx, item := range items {
+		items[idx] = l.expandValue(item)
+	}
+	return items
+}
+
+func (l *Loader) expandValue(value interface{}) interface{} {
+	switch v := value.(type) {
+	case string:
+		return l.expandString(v)
+	case map[string]interface{}:
+		return l.expandMap(v)
+	case []interface{}:
+		return l.expandSlice(v)
+	default:
+		return value
+	}
 }
 
 // expandString expands ${VAR} or $VAR style variables

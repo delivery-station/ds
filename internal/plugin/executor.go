@@ -52,73 +52,17 @@ func (e *Executor) ExecutePlugin(pluginName string, args []string) (int, error) 
 
 	log.Debug("Executing plugin", "name", pluginName, "args", args)
 
-	// Create client
-	client := plugin.NewClient(&plugin.ClientConfig{
-		HandshakeConfig: pkgplugin.Handshake,
-		Plugins:         pkgplugin.PluginMap,
-		Cmd:             exec.Command(p.Path),
-		AllowedProtocols: []plugin.Protocol{
-			plugin.ProtocolGRPC,
-		},
-		Logger: hclog.New(&hclog.LoggerOptions{
-			Name:   "ds-plugin",
-			Output: os.Stderr,
-			Level:  hclog.Error,
-		}),
-	})
-	defer client.Kill()
-
-	// Connect via RPC
-	rpcClient, err := client.Client()
-	if err != nil {
-		return 1, fmt.Errorf("failed to connect to plugin: %w", err)
-	}
-
-	// Request the plugin
-	raw, err := rpcClient.Dispense("ds-plugin")
-	if err != nil {
-		return 1, fmt.Errorf("failed to dispense plugin: %w", err)
-	}
-
-	// Cast to our interface
-	dsPlugin, ok := raw.(types.PluginProtocol)
-	if !ok {
-		return 1, fmt.Errorf("plugin does not implement PluginProtocol")
-	}
-
-	// Prepare environment
-	envMap := make(map[string]string)
-	env := e.PrepareEnvironment(pluginName)
-	for _, e := range env {
-		parts := strings.SplitN(e, "=", 2)
-		if len(parts) == 2 {
-			envMap[parts[0]] = parts[1]
-		}
-	}
-
-	// Execute
-	ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
-	if e.config != nil {
-		ctx = types.WithHostConfigPayload(ctx, e.config)
-	}
-	defer cancel()
-
-	// The first arg is the operation (e.g. "fetch"), the rest are args
 	if len(args) == 0 {
 		return 1, fmt.Errorf("no operation specified")
 	}
-	operation := args[0]
-	opArgs := args[1:]
 
-	result, err := dsPlugin.Execute(ctx, operation, opArgs, envMap)
+	envMap := envSliceToMap(e.PrepareEnvironment(pluginName))
+
+	result, exitCode, err := e.runPlugin(pluginName, p, args, envMap)
 	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			return 124, fmt.Errorf("plugin execution timed out")
-		}
-		return 1, fmt.Errorf("plugin execution failed: %w", err)
+		return exitCode, err
 	}
 
-	// Print output
 	if result.Stdout != "" {
 		fmt.Println(result.Stdout)
 	}
@@ -130,7 +74,19 @@ func (e *Executor) ExecutePlugin(pluginName string, args []string) (int, error) 
 		return result.ExitCode, fmt.Errorf("%s", result.Error)
 	}
 
-	return result.ExitCode, nil
+	finalizerName := ""
+	if p.Manifest != nil && len(p.Manifest.Annotations) > 0 {
+		finalizerName = strings.TrimSpace(p.Manifest.Annotations["finalizer"])
+	}
+
+	if exitCode == 0 && finalizerName != "" && finalizerName != pluginName {
+		finalizerExit, finalizerErr := e.executeFinalizer(finalizerName)
+		if finalizerErr != nil {
+			log.Warn("Finalizer execution failed", "plugin", finalizerName, "exit_code", finalizerExit, "error", finalizerErr)
+		}
+	}
+
+	return exitCode, nil
 }
 
 // PrepareEnvironment prepares environment variables for plugin execution
@@ -182,11 +138,29 @@ func (e *Executor) ExecutePluginWithOutput(pluginName string, args []string) (st
 
 	log.Debug("Executing plugin with output capture", "plugin", pluginName, "args", args)
 
-	// Create client
+	if len(args) == 0 {
+		return "", "", 1, fmt.Errorf("no operation specified")
+	}
+
+	envMap := envSliceToMap(e.PrepareEnvironment(pluginName))
+
+	result, exitCode, err := e.runPlugin(pluginName, p, args, envMap)
+	if err != nil {
+		return "", "", exitCode, err
+	}
+
+	return result.Stdout, result.Stderr, result.ExitCode, nil
+}
+
+func (e *Executor) runPlugin(pluginName string, info *types.PluginInfo, args []string, envMap map[string]string) (*types.ExecutionResult, int, error) {
+	if len(args) == 0 {
+		return nil, 1, fmt.Errorf("no operation specified")
+	}
+
 	client := plugin.NewClient(&plugin.ClientConfig{
 		HandshakeConfig: pkgplugin.Handshake,
 		Plugins:         pkgplugin.PluginMap,
-		Cmd:             exec.Command(p.Path),
+		Cmd:             exec.Command(info.Path),
 		AllowedProtocols: []plugin.Protocol{
 			plugin.ProtocolGRPC,
 		},
@@ -198,52 +172,88 @@ func (e *Executor) ExecutePluginWithOutput(pluginName string, args []string) (st
 	})
 	defer client.Kill()
 
-	// Connect via RPC
 	rpcClient, err := client.Client()
 	if err != nil {
-		return "", "", 1, fmt.Errorf("failed to connect to plugin: %w", err)
+		return nil, 1, fmt.Errorf("failed to connect to plugin: %w", err)
 	}
 
-	// Request the plugin
 	raw, err := rpcClient.Dispense("ds-plugin")
 	if err != nil {
-		return "", "", 1, fmt.Errorf("failed to dispense plugin: %w", err)
+		return nil, 1, fmt.Errorf("failed to dispense plugin: %w", err)
 	}
 
-	// Cast to our interface
 	dsPlugin, ok := raw.(types.PluginProtocol)
 	if !ok {
-		return "", "", 1, fmt.Errorf("plugin does not implement PluginProtocol")
+		return nil, 1, fmt.Errorf("plugin does not implement PluginProtocol")
 	}
 
-	// Prepare environment
-	envMap := make(map[string]string)
-	env := e.PrepareEnvironment(pluginName)
-	for _, e := range env {
-		parts := strings.SplitN(e, "=", 2)
-		if len(parts) == 2 {
-			envMap[parts[0]] = parts[1]
-		}
-	}
+	op := args[0]
+	opArgs := args[1:]
 
-	// Execute
 	ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
 	if e.config != nil {
 		ctx = types.WithHostConfigPayload(ctx, e.config)
 	}
 	defer cancel()
 
-	// The first arg is the operation (e.g. "fetch"), the rest are args
-	if len(args) == 0 {
-		return "", "", 1, fmt.Errorf("no operation specified")
-	}
-	operation := args[0]
-	opArgs := args[1:]
-
-	result, err := dsPlugin.Execute(ctx, operation, opArgs, envMap)
+	result, err := dsPlugin.Execute(ctx, op, opArgs, envMap)
 	if err != nil {
-		return "", "", 1, fmt.Errorf("plugin execution failed: %w", err)
+		if ctx.Err() == context.DeadlineExceeded {
+			return nil, 124, fmt.Errorf("plugin execution timed out")
+		}
+		return nil, 1, fmt.Errorf("plugin execution failed: %w", err)
 	}
 
-	return result.Stdout, result.Stderr, result.ExitCode, nil
+	return result, result.ExitCode, nil
+}
+
+func (e *Executor) executeFinalizer(finalizerName string) (int, error) {
+	log.Info("Executing finalizer plugin", "plugin", finalizerName)
+
+	finalizerInfo, err := e.manager.GetPlugin(finalizerName)
+	if err != nil {
+		return 1, fmt.Errorf("finalizer plugin '%s' not found: %w", finalizerName, err)
+	}
+
+	if err := e.manager.ValidatePlugin(finalizerName); err != nil {
+		return 1, fmt.Errorf("finalizer plugin '%s' is invalid: %w", finalizerName, err)
+	}
+
+	envMap := envSliceToMap(e.PrepareEnvironment(finalizerName))
+
+	result, exitCode, err := e.runPlugin(finalizerName, finalizerInfo, []string{"upload"}, envMap)
+	if err != nil {
+		return exitCode, fmt.Errorf("finalizer plugin '%s' failed: %w", finalizerName, err)
+	}
+
+	if result.Stdout != "" {
+		fmt.Println(result.Stdout)
+	}
+	if result.Stderr != "" {
+		fmt.Fprint(os.Stderr, result.Stderr)
+	}
+	if result.Error != "" {
+		return result.ExitCode, fmt.Errorf("finalizer plugin '%s' reported error: %s", finalizerName, result.Error)
+	}
+	if result.ExitCode != 0 {
+		return result.ExitCode, fmt.Errorf("finalizer plugin '%s' exited with status %d", finalizerName, result.ExitCode)
+	}
+
+	log.Info("Finalizer plugin completed", "plugin", finalizerName)
+	return 0, nil
+}
+
+func envSliceToMap(env []string) map[string]string {
+	result := make(map[string]string, len(env))
+	for _, entry := range env {
+		if idx := strings.Index(entry, "="); idx >= 0 {
+			key := entry[:idx]
+			value := ""
+			if idx+1 < len(entry) {
+				value = entry[idx+1:]
+			}
+			result[key] = value
+		}
+	}
+	return result
 }

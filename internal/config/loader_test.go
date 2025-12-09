@@ -325,9 +325,11 @@ func TestExpandVariables(t *testing.T) {
 	// Set test environment variables
 	_ = os.Setenv("TEST_USER", "testuser")
 	_ = os.Setenv("TEST_TOKEN", "secret123")
+	_ = os.Setenv("TEST_BUCKET", "env-bucket")
 	defer func() {
 		_ = os.Unsetenv("TEST_USER")
 		_ = os.Unsetenv("TEST_TOKEN")
+		_ = os.Unsetenv("TEST_BUCKET")
 	}()
 
 	config := &types.Config{
@@ -342,6 +344,18 @@ func TestExpandVariables(t *testing.T) {
 		},
 		Proxy: types.ProxyConfig{
 			HTTPProxy: "${TEST_USER}:${TEST_TOKEN}@proxy.com",
+		},
+		Plugins: types.PluginsConfig{
+			Dir: "./plugins",
+			Settings: map[string]map[string]interface{}{
+				"s3": {
+					"bucket": "${TEST_BUCKET}",
+					"credentials": map[string]interface{}{
+						"access_key": "${TEST_USER}",
+					},
+					"endpoints": []interface{}{"${TEST_USER}"},
+				},
+			},
 		},
 	}
 
@@ -360,5 +374,21 @@ func TestExpandVariables(t *testing.T) {
 
 	if config.Proxy.HTTPProxy != "testuser:secret123@proxy.com" {
 		t.Errorf("expected proxy to be expanded, got %s", config.Proxy.HTTPProxy)
+	}
+
+	settings := config.Plugins.Settings["s3"]
+	if settings == nil {
+		t.Fatalf("expected plugin settings for s3")
+	}
+	if settings["bucket"] != "env-bucket" {
+		t.Errorf("expected bucket to be expanded, got %v", settings["bucket"])
+	}
+	creds := settings["credentials"].(map[string]interface{})
+	if creds["access_key"] != "testuser" {
+		t.Errorf("expected nested value to be expanded, got %v", creds["access_key"])
+	}
+	endpoints := settings["endpoints"].([]interface{})
+	if endpoints[0] != "testuser" {
+		t.Errorf("expected slice value to be expanded, got %v", endpoints[0])
 	}
 }

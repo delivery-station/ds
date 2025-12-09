@@ -348,7 +348,7 @@ func TestLoadPluginManifest(t *testing.T) {
 
 	// Create manifest
 	manifestPath := filepath.Join(tmpDir, "ds-manifesttest.json")
-	manifestContent := `{"name":"manifesttest","version":"2.0.0","description":"Manifest test plugin","commands":[{"name":"cmd1","description":"Command 1"},{"name":"cmd2","description":"Command 2"}],"platform":{"os":["linux","darwin"],"arch":["amd64"]}}`
+	manifestContent := `{"name":"manifesttest","version":"2.0.0","description":"Manifest test plugin","commands":[{"name":"cmd1","description":"Command 1"},{"name":"cmd2","description":"Command 2"}],"platform":{"os":["linux","darwin"],"arch":["amd64"]},"annotations":{"finalizer":"cleanup"}}`
 	if err := os.WriteFile(manifestPath, []byte(manifestContent), 0644); err != nil {
 		t.Fatalf("failed to create manifest: %v", err)
 	}
@@ -377,5 +377,9 @@ func TestLoadPluginManifest(t *testing.T) {
 
 	if len(manifest.Platform.Arch) != 1 {
 		t.Errorf("expected 1 Arch entry, got %d", len(manifest.Platform.Arch))
+	}
+
+	if manifest.Annotations["finalizer"] != "cleanup" {
+		t.Errorf("expected annotation finalizer to be 'cleanup', got '%s'", manifest.Annotations["finalizer"])
 	}
 }

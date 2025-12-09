@@ -11,12 +11,13 @@ type PluginInfo struct {
 
 // PluginManifest represents the plugin.yaml manifest file
 type PluginManifest struct {
-	Name        string          `mapstructure:"name" yaml:"name"`
-	Version     string          `mapstructure:"version" yaml:"version"`
-	Description string          `mapstructure:"description" yaml:"description"`
-	Checksum    string          `mapstructure:"checksum" yaml:"checksum,omitempty"`
-	Commands    []PluginCommand `mapstructure:"commands" yaml:"commands,omitempty"`
-	Platform    PluginPlatform  `mapstructure:"platform" yaml:"platform,omitempty"`
+	Name        string            `mapstructure:"name" yaml:"name"`
+	Version     string            `mapstructure:"version" yaml:"version"`
+	Description string            `mapstructure:"description" yaml:"description"`
+	Checksum    string            `mapstructure:"checksum" yaml:"checksum,omitempty"`
+	Commands    []PluginCommand   `mapstructure:"commands" yaml:"commands,omitempty"`
+	Platform    PluginPlatform    `mapstructure:"platform" yaml:"platform,omitempty"`
+	Annotations map[string]string `mapstructure:"annotations" yaml:"annotations,omitempty" json:"annotations,omitempty"`
 }
 
 // PluginCommand represents a command provided by the plugin

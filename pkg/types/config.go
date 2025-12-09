@@ -56,10 +56,11 @@ type ProxyConfig struct {
 
 // PluginsConfig contains plugin management settings
 type PluginsConfig struct {
-	Dir         string          `mapstructure:"dir" yaml:"dir"`
-	AutoInstall bool            `mapstructure:"auto_install" yaml:"auto_install"`
-	Sources     []PluginSource  `mapstructure:"sources" yaml:"sources,omitempty"`
-	Signature   SignatureConfig `mapstructure:"signature" yaml:"signature,omitempty"`
+	Dir         string                            `mapstructure:"dir" yaml:"dir"`
+	AutoInstall bool                              `mapstructure:"auto_install" yaml:"auto_install"`
+	Sources     []PluginSource                    `mapstructure:"sources" yaml:"sources,omitempty"`
+	Signature   SignatureConfig                   `mapstructure:"signature" yaml:"signature,omitempty"`
+	Settings    map[string]map[string]interface{} `mapstructure:"settings" yaml:"settings,omitempty"`
 }
 
 // SignatureConfig contains digital signature verification settings

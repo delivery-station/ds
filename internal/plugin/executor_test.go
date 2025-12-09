@@ -71,6 +71,20 @@ func buildTestPlugin(t *testing.T, dir, name, sourceCode string) string {
 	return pluginPath
 }
 
+func copyExecutable(t *testing.T, dst, src string, mode os.FileMode) {
+	t.Helper()
+	data, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatalf("failed to read file %s: %v", src, err)
+	}
+	if err := os.WriteFile(dst, data, mode); err != nil {
+		t.Fatalf("failed to write file %s: %v", dst, err)
+	}
+	if err := os.Chmod(dst, mode); err != nil {
+		t.Fatalf("failed to set permissions on %s: %v", dst, err)
+	}
+}
+
 func TestNewExecutor(t *testing.T) {
 	tmpDir := t.TempDir()
 	mgr := NewManager(tmpDir)
@@ -215,6 +229,215 @@ func main() {
 
 	if exitCode != 0 {
 		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+}
+
+func TestExecutePlugin_FinalizerRunsOnSuccess(t *testing.T) {
+	pluginDir := t.TempDir()
+
+	finalizerDir := t.TempDir()
+	finalizerSource := `package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/delivery-station/ds/pkg/plugin"
+	"github.com/delivery-station/ds/pkg/types"
+	goplugin "github.com/hashicorp/go-plugin"
+)
+
+type FinalizerPlugin struct{}
+
+func (p *FinalizerPlugin) GetMetadata(ctx context.Context) (*types.PluginMetadata, error) {
+	return &types.PluginMetadata{Name: "finalizer", Version: "1.0.0"}, nil
+}
+
+func (p *FinalizerPlugin) Execute(ctx context.Context, operation string, args []string, env map[string]string) (*types.ExecutionResult, error) {
+	if operation != "upload" {
+		return &types.ExecutionResult{ExitCode: 1, Error: fmt.Sprintf("unexpected operation: %s", operation)}, nil
+	}
+	if len(args) != 0 {
+		return &types.ExecutionResult{ExitCode: 1, Error: "unexpected arguments"}, nil
+	}
+	dest := env["FINALIZER_OUTPUT"]
+	if dest == "" {
+		return &types.ExecutionResult{ExitCode: 1, Error: "FINALIZER_OUTPUT not set"}, nil
+	}
+	if err := os.WriteFile(dest, []byte("finalized"), 0600); err != nil {
+		return &types.ExecutionResult{ExitCode: 1, Error: err.Error()}, nil
+	}
+	return &types.ExecutionResult{Stdout: "finalizer complete", ExitCode: 0}, nil
+}
+
+func (p *FinalizerPlugin) ValidateConfig(ctx context.Context, config map[string]interface{}) error {
+	return nil
+}
+
+func (p *FinalizerPlugin) GetSchema(ctx context.Context) (*types.PluginSchema, error) {
+	return &types.PluginSchema{}, nil
+}
+
+func main() {
+	goplugin.Serve(&goplugin.ServeConfig{
+		HandshakeConfig: plugin.Handshake,
+		Plugins: map[string]goplugin.Plugin{
+			"ds-plugin": &plugin.DSPlugin{Impl: &FinalizerPlugin{}},
+		},
+		GRPCServer: goplugin.DefaultGRPCServer,
+	})
+}
+`
+	finalizerBinary := buildTestPlugin(t, finalizerDir, "finalizer", finalizerSource)
+	copyExecutable(t, filepath.Join(pluginDir, filepath.Base(finalizerBinary)), finalizerBinary, 0755)
+	finalizerManifest := fmt.Sprintf(`{"name":"finalizer","version":"1.0.0","platform":{"os":["%s"],"arch":["%s"]},"commands":[{"name":"upload"}]}`, runtime.GOOS, runtime.GOARCH)
+	if err := os.WriteFile(filepath.Join(pluginDir, "ds-finalizer.json"), []byte(finalizerManifest), 0644); err != nil {
+		t.Fatalf("failed to write finalizer manifest: %v", err)
+	}
+
+	primaryDir := t.TempDir()
+	primarySource := `package main
+
+import (
+	"context"
+
+	"github.com/delivery-station/ds/pkg/plugin"
+	"github.com/delivery-station/ds/pkg/types"
+	goplugin "github.com/hashicorp/go-plugin"
+)
+
+type PrimaryPlugin struct{}
+
+func (p *PrimaryPlugin) GetMetadata(ctx context.Context) (*types.PluginMetadata, error) {
+	return &types.PluginMetadata{Name: "primary", Version: "1.0.0"}, nil
+}
+
+func (p *PrimaryPlugin) Execute(ctx context.Context, operation string, args []string, env map[string]string) (*types.ExecutionResult, error) {
+	if operation != "run" {
+		return &types.ExecutionResult{ExitCode: 1, Error: "unexpected operation"}, nil
+	}
+	return &types.ExecutionResult{Stdout: "primary complete", ExitCode: 0}, nil
+}
+
+func (p *PrimaryPlugin) ValidateConfig(ctx context.Context, config map[string]interface{}) error {
+	return nil
+}
+
+func (p *PrimaryPlugin) GetSchema(ctx context.Context) (*types.PluginSchema, error) {
+	return &types.PluginSchema{}, nil
+}
+
+func main() {
+	goplugin.Serve(&goplugin.ServeConfig{
+		HandshakeConfig: plugin.Handshake,
+		Plugins: map[string]goplugin.Plugin{
+			"ds-plugin": &plugin.DSPlugin{Impl: &PrimaryPlugin{}},
+		},
+		GRPCServer: goplugin.DefaultGRPCServer,
+	})
+}
+`
+	primaryBinary := buildTestPlugin(t, primaryDir, "primary", primarySource)
+	copyExecutable(t, filepath.Join(pluginDir, filepath.Base(primaryBinary)), primaryBinary, 0755)
+	primaryManifest := fmt.Sprintf(`{"name":"primary","version":"1.0.0","annotations":{"finalizer":"finalizer"},"platform":{"os":["%s"],"arch":["%s"]},"commands":[{"name":"run"}]}`, runtime.GOOS, runtime.GOARCH)
+	if err := os.WriteFile(filepath.Join(pluginDir, "ds-primary.json"), []byte(primaryManifest), 0644); err != nil {
+		t.Fatalf("failed to write primary manifest: %v", err)
+	}
+
+	mgr := NewManager(pluginDir)
+	if err := mgr.DiscoverPlugins(); err != nil {
+		t.Fatalf("failed to discover plugins: %v", err)
+	}
+
+	executor := NewExecutor(mgr, nil)
+	outputFile := filepath.Join(t.TempDir(), "finalizer.txt")
+	if err := os.Setenv("FINALIZER_OUTPUT", outputFile); err != nil {
+		t.Fatalf("failed to set environment: %v", err)
+	}
+	defer os.Unsetenv("FINALIZER_OUTPUT")
+
+	exitCode, err := executor.ExecutePlugin("primary", []string{"run"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+
+	data, err := os.ReadFile(outputFile)
+	if err != nil {
+		t.Fatalf("expected finalizer to write output file: %v", err)
+	}
+	if !strings.Contains(string(data), "finalized") {
+		t.Fatalf("unexpected finalizer output: %s", string(data))
+	}
+}
+
+func TestExecutePlugin_FinalizerMissingIsOptional(t *testing.T) {
+	pluginDir := t.TempDir()
+
+	primaryDir := t.TempDir()
+	primarySource := `package main
+
+import (
+	"context"
+
+	"github.com/delivery-station/ds/pkg/plugin"
+	"github.com/delivery-station/ds/pkg/types"
+	goplugin "github.com/hashicorp/go-plugin"
+)
+
+type PrimaryPlugin struct{}
+
+func (p *PrimaryPlugin) GetMetadata(ctx context.Context) (*types.PluginMetadata, error) {
+	return &types.PluginMetadata{Name: "primary", Version: "1.0.0"}, nil
+}
+
+func (p *PrimaryPlugin) Execute(ctx context.Context, operation string, args []string, env map[string]string) (*types.ExecutionResult, error) {
+	if operation != "run" {
+		return &types.ExecutionResult{ExitCode: 1, Error: "unexpected operation"}, nil
+	}
+	return &types.ExecutionResult{Stdout: "primary complete", ExitCode: 0}, nil
+}
+
+func (p *PrimaryPlugin) ValidateConfig(ctx context.Context, config map[string]interface{}) error {
+	return nil
+}
+
+func (p *PrimaryPlugin) GetSchema(ctx context.Context) (*types.PluginSchema, error) {
+	return &types.PluginSchema{}, nil
+}
+
+func main() {
+	goplugin.Serve(&goplugin.ServeConfig{
+		HandshakeConfig: plugin.Handshake,
+		Plugins: map[string]goplugin.Plugin{
+			"ds-plugin": &plugin.DSPlugin{Impl: &PrimaryPlugin{}},
+		},
+		GRPCServer: goplugin.DefaultGRPCServer,
+	})
+}
+`
+	primaryBinary := buildTestPlugin(t, primaryDir, "primary", primarySource)
+	copyExecutable(t, filepath.Join(pluginDir, filepath.Base(primaryBinary)), primaryBinary, 0755)
+	primaryManifest := fmt.Sprintf(`{"name":"primary","version":"1.0.0","annotations":{"finalizer":"missing-finalizer"},"platform":{"os":["%s"],"arch":["%s"]},"commands":[{"name":"run"}]}`, runtime.GOOS, runtime.GOARCH)
+	if err := os.WriteFile(filepath.Join(pluginDir, "ds-primary.json"), []byte(primaryManifest), 0644); err != nil {
+		t.Fatalf("failed to write primary manifest: %v", err)
+	}
+
+	mgr := NewManager(pluginDir)
+	if err := mgr.DiscoverPlugins(); err != nil {
+		t.Fatalf("failed to discover plugins: %v", err)
+	}
+
+	executor := NewExecutor(mgr, nil)
+	exitCode, err := executor.ExecutePlugin("primary", []string{"run"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
 	}
 }
 
