@@ -105,28 +105,24 @@ var pluginInfoCmd = &cobra.Command{
 			fmt.Printf("Description: %s\n", pluginInfo.Description)
 		}
 
-		if pluginInfo.Manifest != nil {
-			manifest := pluginInfo.Manifest
-
-			if len(manifest.Commands) > 0 {
-				fmt.Println("\nCommands:")
-				for _, cmd := range manifest.Commands {
-					fmt.Printf("  - %s", cmd.Name)
-					if cmd.Description != "" {
-						fmt.Printf(": %s", cmd.Description)
-					}
-					fmt.Println()
+		if len(pluginInfo.Commands) > 0 {
+			fmt.Println("\nCommands:")
+			for _, cmd := range pluginInfo.Commands {
+				fmt.Printf("  - %s", cmd.Name)
+				if cmd.Description != "" {
+					fmt.Printf(": %s", cmd.Description)
 				}
+				fmt.Println()
 			}
+		}
 
-			if len(manifest.Platform.OS) > 0 || len(manifest.Platform.Arch) > 0 {
-				fmt.Println("\nPlatform Support:")
-				if len(manifest.Platform.OS) > 0 {
-					fmt.Printf("  OS: %v\n", manifest.Platform.OS)
-				}
-				if len(manifest.Platform.Arch) > 0 {
-					fmt.Printf("  Arch: %v\n", manifest.Platform.Arch)
-				}
+		if len(pluginInfo.Platform.OS) > 0 || len(pluginInfo.Platform.Arch) > 0 {
+			fmt.Println("\nPlatform Support:")
+			if len(pluginInfo.Platform.OS) > 0 {
+				fmt.Printf("  OS: %v\n", pluginInfo.Platform.OS)
+			}
+			if len(pluginInfo.Platform.Arch) > 0 {
+				fmt.Printf("  Arch: %v\n", pluginInfo.Platform.Arch)
 			}
 		}
 

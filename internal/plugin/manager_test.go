@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/delivery-station/ds/pkg/types"
@@ -31,8 +30,7 @@ func TestIsCompatiblePlatform(t *testing.T) {
 		{
 			name: "no manifest",
 			plugin: &types.PluginInfo{
-				Name:     "test",
-				Manifest: nil,
+				Name: "test",
 			},
 			compatible: true,
 		},
@@ -40,7 +38,7 @@ func TestIsCompatiblePlatform(t *testing.T) {
 			name: "no platform info",
 			plugin: &types.PluginInfo{
 				Name:     "test",
-				Manifest: &types.PluginManifest{},
+				Platform: types.PluginPlatform{},
 			},
 			compatible: true,
 		},
@@ -48,11 +46,9 @@ func TestIsCompatiblePlatform(t *testing.T) {
 			name: "compatible platform",
 			plugin: &types.PluginInfo{
 				Name: "test",
-				Manifest: &types.PluginManifest{
-					Platform: types.PluginPlatform{
-						OS:   []string{runtime.GOOS},
-						Arch: []string{runtime.GOARCH},
-					},
+				Platform: types.PluginPlatform{
+					OS:   []string{runtime.GOOS},
+					Arch: []string{runtime.GOARCH},
 				},
 			},
 			compatible: true,
@@ -61,10 +57,8 @@ func TestIsCompatiblePlatform(t *testing.T) {
 			name: "incompatible OS",
 			plugin: &types.PluginInfo{
 				Name: "test",
-				Manifest: &types.PluginManifest{
-					Platform: types.PluginPlatform{
-						OS: []string{"invalid-os"},
-					},
+				Platform: types.PluginPlatform{
+					OS: []string{"invalid-os"},
 				},
 			},
 			compatible: false,
@@ -73,11 +67,9 @@ func TestIsCompatiblePlatform(t *testing.T) {
 			name: "compatible OS, incompatible arch",
 			plugin: &types.PluginInfo{
 				Name: "test",
-				Manifest: &types.PluginManifest{
-					Platform: types.PluginPlatform{
-						OS:   []string{runtime.GOOS},
-						Arch: []string{"invalid-arch"},
-					},
+				Platform: types.PluginPlatform{
+					OS:   []string{runtime.GOOS},
+					Arch: []string{"invalid-arch"},
 				},
 			},
 			compatible: false,
@@ -168,9 +160,8 @@ func TestDiscoverPlugins_WithMockPlugin(t *testing.T) {
 		t.Errorf("expected plugin name 'testplugin', got '%s'", plugin.Name)
 	}
 
-	// Version comes from --version output which includes prefix
-	if !strings.Contains(plugin.Version, "1.0.0") {
-		t.Errorf("expected version to contain '1.0.0', got '%s'", plugin.Version)
+	if plugin.Version != "unknown" {
+		t.Errorf("expected version to default to 'unknown', got '%s'", plugin.Version)
 	}
 }
 

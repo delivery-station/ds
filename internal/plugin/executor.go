@@ -273,12 +273,6 @@ func (e *Executor) collectFinalizers(pluginName string, pluginInfo *types.Plugin
 		}
 	}
 
-	if len(finalizers) == 0 && pluginInfo != nil && pluginInfo.Manifest != nil {
-		if name := strings.TrimSpace(pluginInfo.Manifest.Annotations["finalizer"]); name != "" {
-			appendFinalizer(types.FinalizerRequest{Name: name}, &finalizers)
-		}
-	}
-
 	return finalizers
 }
 

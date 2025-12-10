@@ -63,7 +63,7 @@ func buildTestPlugin(t *testing.T, dir, name, sourceCode string) string {
 		fmt.Sprintf("GOARCH=%s", runtime.GOARCH),
 	)
 	if output, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("failed to build test plugin: %v\nOutput: %s", err, output)
+		t.Fatalf("failed to build test plugin: %v\nOutput: %s\nSource:\n%s", err, output, sourceCode)
 	}
 
 	return pluginPath
@@ -164,8 +164,8 @@ func (p *TestPlugin) GetSchema(ctx context.Context) (*types.PluginSchema, error)
 	return &types.PluginSchema{}, nil
 }
 
-func (p *TestPlugin) GetManifest(ctx context.Context) (*types.PluginManifest, error) {
-	return &types.PluginManifest{
+func (p *TestPlugin) GetManifest(ctx context.Context) (*types.PluginInfo, error) {
+	return &types.PluginInfo{
 		Name:    "testexec",
 		Version: "1.0.0",
 		Platform: types.PluginPlatform{
@@ -261,8 +261,8 @@ func (p *FinalizerPlugin) GetSchema(ctx context.Context) (*types.PluginSchema, e
 	return &types.PluginSchema{}, nil
 }
 
-func (p *FinalizerPlugin) GetManifest(ctx context.Context) (*types.PluginManifest, error) {
-	return &types.PluginManifest{
+func (p *FinalizerPlugin) GetManifest(ctx context.Context) (*types.PluginInfo, error) {
+	return &types.PluginInfo{
 		Name:    "finalizer",
 		Version: "1.0.0",
 		Platform: types.PluginPlatform{
@@ -310,7 +310,10 @@ func (p *PrimaryPlugin) Execute(ctx context.Context, operation string, args []st
 	if operation != "run" {
 		return &types.ExecutionResult{ExitCode: 1, Error: "unexpected operation"}, nil
 	}
-	return &types.ExecutionResult{Stdout: "primary complete", ExitCode: 0}, nil
+	return &types.ExecutionResult{
+		Stdout:   "{\"metadata\":{\"finalizer\":\"finalizer\"}}",
+		ExitCode: 0,
+	}, nil
 }
 
 func (p *PrimaryPlugin) ValidateConfig(ctx context.Context, config map[string]interface{}) error {
@@ -321,8 +324,8 @@ func (p *PrimaryPlugin) GetSchema(ctx context.Context) (*types.PluginSchema, err
 	return &types.PluginSchema{}, nil
 }
 
-func (p *PrimaryPlugin) GetManifest(ctx context.Context) (*types.PluginManifest, error) {
-	return &types.PluginManifest{
+func (p *PrimaryPlugin) GetManifest(ctx context.Context) (*types.PluginInfo, error) {
+	return &types.PluginInfo{
 		Name:    "primary",
 		Version: "1.0.0",
 		Platform: types.PluginPlatform{
@@ -331,9 +334,6 @@ func (p *PrimaryPlugin) GetManifest(ctx context.Context) (*types.PluginManifest,
 		},
 		Commands: []types.PluginCommand{
 			{Name: "run"},
-		},
-		Annotations: map[string]string{
-			"finalizer": "finalizer",
 		},
 	}, nil
 }
@@ -350,7 +350,7 @@ func main() {
 `
 	primaryBinary := buildTestPlugin(t, primaryDir, "primary", primarySource)
 	copyExecutable(t, filepath.Join(pluginDir, filepath.Base(primaryBinary)), primaryBinary, 0755)
-	primaryManifest := fmt.Sprintf(`{"name":"primary","version":"1.0.0","annotations":{"finalizer":"finalizer"},"platform":{"os":["%s"],"arch":["%s"]},"commands":[{"name":"run"}]}`, runtime.GOOS, runtime.GOARCH)
+	primaryManifest := fmt.Sprintf(`{"name":"primary","version":"1.0.0","platform":{"os":["%s"],"arch":["%s"]},"commands":[{"name":"run"}]}`, runtime.GOOS, runtime.GOARCH)
 	if err := os.WriteFile(filepath.Join(pluginDir, "ds-primary.json"), []byte(primaryManifest), 0644); err != nil {
 		t.Fatalf("failed to write primary manifest: %v", err)
 	}
@@ -418,8 +418,8 @@ func (p *PrimaryPlugin) GetSchema(ctx context.Context) (*types.PluginSchema, err
 	return &types.PluginSchema{}, nil
 }
 
-func (p *PrimaryPlugin) GetManifest(ctx context.Context) (*types.PluginManifest, error) {
-	return &types.PluginManifest{
+func (p *PrimaryPlugin) GetManifest(ctx context.Context) (*types.PluginInfo, error) {
+	return &types.PluginInfo{
 		Name:    "primary",
 		Version: "1.0.0",
 		Platform: types.PluginPlatform{
@@ -444,7 +444,7 @@ func main() {
 `
 	primaryBinary := buildTestPlugin(t, primaryDir, "primary", primarySource)
 	copyExecutable(t, filepath.Join(pluginDir, filepath.Base(primaryBinary)), primaryBinary, 0755)
-	primaryManifest := fmt.Sprintf(`{"name":"primary","version":"1.0.0","annotations":{"finalizer":"missing-finalizer"},"platform":{"os":["%s"],"arch":["%s"]},"commands":[{"name":"run"}]}`, runtime.GOOS, runtime.GOARCH)
+	primaryManifest := fmt.Sprintf(`{"name":"primary","version":"1.0.0","platform":{"os":["%s"],"arch":["%s"]},"commands":[{"name":"run"}]}`, runtime.GOOS, runtime.GOARCH)
 	if err := os.WriteFile(filepath.Join(pluginDir, "ds-primary.json"), []byte(primaryManifest), 0644); err != nil {
 		t.Fatalf("failed to write primary manifest: %v", err)
 	}
@@ -493,8 +493,8 @@ func (p *TestPlugin) GetSchema(ctx context.Context) (*types.PluginSchema, error)
 	return &types.PluginSchema{}, nil
 }
 
-func (p *TestPlugin) GetManifest(ctx context.Context) (*types.PluginManifest, error) {
-	return &types.PluginManifest{
+func (p *TestPlugin) GetManifest(ctx context.Context) (*types.PluginInfo, error) {
+	return &types.PluginInfo{
 		Name:    "failplugin",
 		Version: "1.0.0",
 		Commands: []types.PluginCommand{{Name: "run"}},
@@ -577,8 +577,8 @@ func (p *TestPlugin) GetSchema(ctx context.Context) (*types.PluginSchema, error)
 	return &types.PluginSchema{}, nil
 }
 
-func (p *TestPlugin) GetManifest(ctx context.Context) (*types.PluginManifest, error) {
-	return &types.PluginManifest{
+func (p *TestPlugin) GetManifest(ctx context.Context) (*types.PluginInfo, error) {
+	return &types.PluginInfo{
 		Name:    "slowplugin",
 		Version: "1.0.0",
 		Commands: []types.PluginCommand{{Name: "run"}},

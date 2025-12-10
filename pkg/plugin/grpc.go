@@ -47,46 +47,39 @@ type GRPCClient struct {
 	broker *plugin.GRPCBroker
 }
 
-func (m *GRPCClient) GetManifest(ctx context.Context) (*types.PluginManifest, error) {
+func (m *GRPCClient) GetManifest(ctx context.Context) (*types.PluginInfo, error) {
 	resp, err := m.client.GetManifest(ctx, &GetManifestRequest{})
 	if err != nil {
 		return nil, err
 	}
 
-	manifest := &types.PluginManifest{
+	info := &types.PluginInfo{
 		Name:        resp.GetName(),
 		Version:     resp.GetVersion(),
 		Description: resp.GetDescription(),
 	}
 
 	if resp.GetPlatform() != nil {
-		manifest.Platform = types.PluginPlatform{
+		info.Platform = types.PluginPlatform{
 			OS:   append([]string{}, resp.GetPlatform().GetOs()...),
 			Arch: append([]string{}, resp.GetPlatform().GetArch()...),
 		}
 	}
 
-	if len(resp.GetAnnotations()) > 0 {
-		manifest.Annotations = make(map[string]string, len(resp.GetAnnotations()))
-		for k, v := range resp.GetAnnotations() {
-			manifest.Annotations[k] = v
-		}
-	}
-
 	if len(resp.GetCommands()) > 0 {
-		manifest.Commands = make([]types.PluginCommand, 0, len(resp.GetCommands()))
+		info.Commands = make([]types.PluginCommand, 0, len(resp.GetCommands()))
 		for _, cmd := range resp.GetCommands() {
 			if cmd == nil {
 				continue
 			}
-			manifest.Commands = append(manifest.Commands, types.PluginCommand{
+			info.Commands = append(info.Commands, types.PluginCommand{
 				Name:        cmd.GetName(),
 				Description: cmd.GetDescription(),
 			})
 		}
 	}
 
-	return manifest, nil
+	return info, nil
 }
 
 func (m *GRPCClient) Execute(ctx context.Context, operation string, args []string) (*types.ExecutionResult, error) {
@@ -193,29 +186,29 @@ type GRPCServer struct {
 }
 
 func (m *GRPCServer) GetManifest(ctx context.Context, req *GetManifestRequest) (*GetManifestResponse, error) {
-	provider, ok := m.Impl.(types.PluginManifestProvider)
+	provider, ok := m.Impl.(types.PluginInfoProvider)
 	if !ok {
 		return nil, status.Errorf(codes.Unimplemented, "manifest RPC not implemented")
 	}
 
-	manifest, err := provider.GetManifest(ctx)
+	info, err := provider.GetManifest(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	if manifest == nil {
+	if info == nil {
 		return &GetManifestResponse{}, nil
 	}
 
 	resp := &GetManifestResponse{
-		Name:        manifest.Name,
-		Version:     manifest.Version,
-		Description: manifest.Description,
+		Name:        info.Name,
+		Version:     info.Version,
+		Description: info.Description,
 	}
 
-	if len(manifest.Commands) > 0 {
-		resp.Commands = make([]*PluginCommand, 0, len(manifest.Commands))
-		for _, cmd := range manifest.Commands {
+	if len(info.Commands) > 0 {
+		resp.Commands = make([]*PluginCommand, 0, len(info.Commands))
+		for _, cmd := range info.Commands {
 			resp.Commands = append(resp.Commands, &PluginCommand{
 				Name:        cmd.Name,
 				Description: cmd.Description,
@@ -224,17 +217,10 @@ func (m *GRPCServer) GetManifest(ctx context.Context, req *GetManifestRequest) (
 
 	}
 
-	if manifest.Annotations != nil {
-		resp.Annotations = make(map[string]string, len(manifest.Annotations))
-		for k, v := range manifest.Annotations {
-			resp.Annotations[k] = v
-		}
-	}
-
-	if len(manifest.Platform.OS) > 0 || len(manifest.Platform.Arch) > 0 {
+	if len(info.Platform.OS) > 0 || len(info.Platform.Arch) > 0 {
 		resp.Platform = &Platform{
-			Os:   append([]string{}, manifest.Platform.OS...),
-			Arch: append([]string{}, manifest.Platform.Arch...),
+			Os:   append([]string{}, info.Platform.OS...),
+			Arch: append([]string{}, info.Platform.Arch...),
 		}
 	}
 

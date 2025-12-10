@@ -1,23 +1,13 @@
 package types
 
-// PluginInfo contains information about an installed plugin
+// PluginInfo describes an installed plugin along with the metadata it exposes.
 type PluginInfo struct {
 	Name        string          `json:"name" yaml:"name"`
 	Version     string          `json:"version" yaml:"version"`
 	Description string          `json:"description" yaml:"description"`
-	Path        string          `json:"path" yaml:"path"`
-	Manifest    *PluginManifest `json:"manifest,omitempty" yaml:"manifest,omitempty"`
-}
-
-// PluginManifest represents the plugin.yaml manifest file
-type PluginManifest struct {
-	Name        string            `mapstructure:"name" yaml:"name"`
-	Version     string            `mapstructure:"version" yaml:"version"`
-	Description string            `mapstructure:"description" yaml:"description"`
-	Checksum    string            `mapstructure:"checksum" yaml:"checksum,omitempty"`
-	Commands    []PluginCommand   `mapstructure:"commands" yaml:"commands,omitempty"`
-	Platform    PluginPlatform    `mapstructure:"platform" yaml:"platform,omitempty"`
-	Annotations map[string]string `mapstructure:"annotations" yaml:"annotations,omitempty" json:"annotations,omitempty"`
+	Path        string          `json:"path,omitempty" yaml:"path,omitempty"`
+	Commands    []PluginCommand `json:"commands,omitempty" yaml:"commands,omitempty"`
+	Platform    PluginPlatform  `json:"platform,omitempty" yaml:"platform,omitempty"`
 }
 
 // PluginCommand represents a command provided by the plugin

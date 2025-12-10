@@ -124,33 +124,34 @@ func (m *Manager) DiscoverPlugins() error {
 			}
 		}
 
-		// Create plugin info
+		// Initialize plugin info entry with defaults
 		pluginInfo := &types.PluginInfo{
-			Name: pluginName,
-			Path: pluginPath,
+			Name:    pluginName,
+			Path:    pluginPath,
+			Version: "unknown",
 		}
 
-		// Try to get version from plugin
-		version, err := m.getPluginVersion(pluginPath)
+		metadata, err := m.loadPluginInfo(pluginPath)
 		if err != nil {
-			log.Debug("Failed to get version", "plugin", pluginName, "error", err)
-			pluginInfo.Version = "unknown"
+			log.Debug("Failed to load plugin metadata", "plugin", pluginName, "error", err)
 		} else {
-			pluginInfo.Version = version
-		}
-
-		// Try to load manifest
-		manifest, err := m.loadPluginManifest(pluginPath)
-		if err != nil {
-			log.Debug("No manifest found", "plugin", pluginName, "error", err)
-		} else {
-			pluginInfo.Manifest = manifest
-			pluginInfo.Description = manifest.Description
-
-			// Override version from manifest if available and plugin version failed
-			if pluginInfo.Version == "unknown" && manifest.Version != "" {
-				pluginInfo.Version = manifest.Version
+			if metadata.Version != "" {
+				pluginInfo.Version = metadata.Version
 			}
+			pluginInfo.Description = metadata.Description
+
+			if len(metadata.Commands) > 0 {
+				pluginInfo.Commands = make([]types.PluginCommand, len(metadata.Commands))
+				copy(pluginInfo.Commands, metadata.Commands)
+			}
+
+			if len(metadata.Platform.OS) > 0 {
+				pluginInfo.Platform.OS = append([]string{}, metadata.Platform.OS...)
+			}
+			if len(metadata.Platform.Arch) > 0 {
+				pluginInfo.Platform.Arch = append([]string{}, metadata.Platform.Arch...)
+			}
+
 		}
 
 		// Validate platform compatibility
@@ -249,26 +250,9 @@ func (m *Manager) ValidatePlugin(name string) error {
 	return nil
 }
 
-// getPluginVersion attempts to get the plugin version by calling it with --version
-func (m *Manager) getPluginVersion(pluginPath string) (string, error) {
-	output, err := exec.Command(pluginPath, "--version").CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("failed to get version: %w", err)
-	}
-
-	// Parse version from output (first line)
-	version := strings.TrimSpace(string(output))
-	if idx := strings.Index(version, "\n"); idx > 0 {
-		version = version[:idx]
-	}
-
-	return version, nil
-}
-
-// loadPluginManifest loads the plugin manifest file
-
-func (m *Manager) loadPluginManifest(pluginPath string) (*types.PluginManifest, error) {
-	manifest, err := m.fetchPluginManifest(pluginPath)
+// loadPluginInfo retrieves plugin metadata via RPC.
+func (m *Manager) loadPluginInfo(pluginPath string) (*types.PluginInfo, error) {
+	manifest, err := m.fetchPluginInfo(pluginPath)
 	if err != nil {
 		if errors.Is(err, errManifestRPCUnsupported) {
 			log.Debug("Plugin does not expose manifest RPC", "path", pluginPath)
@@ -281,7 +265,7 @@ func (m *Manager) loadPluginManifest(pluginPath string) (*types.PluginManifest, 
 	return manifest, nil
 }
 
-func (m *Manager) fetchPluginManifest(pluginPath string) (*types.PluginManifest, error) {
+func (m *Manager) fetchPluginInfo(pluginPath string) (*types.PluginInfo, error) {
 	client := plugin.NewClient(&plugin.ClientConfig{
 		HandshakeConfig: pkgplugin.Handshake,
 		Plugins:         pkgplugin.PluginMap,
@@ -308,7 +292,7 @@ func (m *Manager) fetchPluginManifest(pluginPath string) (*types.PluginManifest,
 	}
 
 	manifestClient, ok := raw.(interface {
-		GetManifest(context.Context) (*types.PluginManifest, error)
+		GetManifest(context.Context) (*types.PluginInfo, error)
 	})
 	if !ok {
 		return nil, errManifestRPCUnsupported
@@ -329,7 +313,7 @@ func (m *Manager) fetchPluginManifest(pluginPath string) (*types.PluginManifest,
 		return nil, fmt.Errorf("plugin returned empty manifest")
 	}
 
-	clone := &types.PluginManifest{
+	clone := &types.PluginInfo{
 		Name:        manifest.Name,
 		Version:     manifest.Version,
 		Description: manifest.Description,
@@ -347,26 +331,19 @@ func (m *Manager) fetchPluginManifest(pluginPath string) (*types.PluginManifest,
 		clone.Platform.Arch = append([]string{}, manifest.Platform.Arch...)
 	}
 
-	if len(manifest.Annotations) > 0 {
-		clone.Annotations = make(map[string]string, len(manifest.Annotations))
-		for k, v := range manifest.Annotations {
-			clone.Annotations[k] = v
-		}
-	}
-
 	return clone, nil
 }
 
 // isCompatiblePlatform checks if the plugin is compatible with current platform
 func (m *Manager) isCompatiblePlatform(plugin *types.PluginInfo) bool {
 	// If no manifest or no platform info, assume compatible
-	if plugin.Manifest == nil || len(plugin.Manifest.Platform.OS) == 0 {
+	if plugin == nil || len(plugin.Platform.OS) == 0 {
 		return true
 	}
 
 	// Check OS compatibility
 	osCompatible := false
-	for _, os := range plugin.Manifest.Platform.OS {
+	for _, os := range plugin.Platform.OS {
 		if os == runtime.GOOS || os == "all" {
 			osCompatible = true
 			break
@@ -378,11 +355,11 @@ func (m *Manager) isCompatiblePlatform(plugin *types.PluginInfo) bool {
 	}
 
 	// Check architecture compatibility
-	if len(plugin.Manifest.Platform.Arch) == 0 {
+	if len(plugin.Platform.Arch) == 0 {
 		return true
 	}
 
-	for _, arch := range plugin.Manifest.Platform.Arch {
+	for _, arch := range plugin.Platform.Arch {
 		if arch == runtime.GOARCH || arch == "all" {
 			return true
 		}
