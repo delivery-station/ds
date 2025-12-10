@@ -81,30 +81,6 @@ func (e *Executor) ExecutePlugin(pluginName, operation string, args []string) (i
 	return exitCode, nil
 }
 
-// HandleError interprets command execution errors and returns appropriate exit code
-func (e *Executor) HandleError(err error, ctx context.Context, pluginName string) int {
-	if err == nil {
-		return 0
-	}
-
-	// Check for timeout
-	if ctx.Err() == context.DeadlineExceeded {
-		log.Error("Plugin timed out", "plugin", pluginName, "timeout", e.timeout)
-		return 124 // Standard timeout exit code
-	}
-
-	// Check for exit error
-	if exitErr, ok := err.(*exec.ExitError); ok {
-		exitCode := exitErr.ExitCode()
-		log.Debug("Plugin exited", "plugin", pluginName, "code", exitCode)
-		return exitCode
-	}
-
-	// Other errors
-	log.Error("Failed to execute plugin", "plugin", pluginName, "error", err)
-	return 1
-}
-
 func (e *Executor) runPlugin(pluginName string, info *types.PluginInfo, operation string, args []string) (*types.ExecutionResult, int, error) {
 	if strings.TrimSpace(operation) == "" {
 		return nil, 1, fmt.Errorf("no operation specified")
