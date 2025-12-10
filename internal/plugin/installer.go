@@ -1,6 +1,9 @@
 package plugin
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -26,6 +29,11 @@ type Installer struct {
 	client    *registry.Client
 	verifier  *SignatureVerifier
 }
+
+const (
+	mediaTypePluginArchive   = "application/vnd.delivery-station.plugin.v1+archive.tar+gzip"
+	mediaTypeArtifactArchive = "application/vnd.delivery-station.artifact.v1+archive.tar+gzip"
+)
 
 // NewInstaller creates a new plugin installer
 func NewInstaller(pluginDir, registryURL string, client *registry.Client) *Installer {
@@ -343,6 +351,13 @@ func (i *Installer) downloadBinaryFromSingleManifest(ctx context.Context, ref, d
 	}
 
 	layer := manifest.Layers[0]
+	if strings.EqualFold(layer.MediaType, mediaTypePluginArchive) || strings.EqualFold(layer.MediaType, mediaTypeArtifactArchive) {
+		if err := i.downloadArchiveLayer(ctx, ref, layer, destPath); err != nil {
+			return err
+		}
+		return nil
+	}
+
 	file, err := os.Create(destPath)
 	if err != nil {
 		return err
@@ -358,6 +373,94 @@ func (i *Installer) downloadBinaryFromSingleManifest(ctx context.Context, ref, d
 
 	if err = i.client.CopyDescriptor(ctx, ref, layer, file); err != nil {
 		return fmt.Errorf("failed to download binary layer: %w", err)
+	}
+
+	return nil
+}
+
+func (i *Installer) downloadArchiveLayer(ctx context.Context, ref string, layer ocispec.Descriptor, destPath string) error {
+	data, err := i.client.FetchDescriptor(ctx, ref, layer)
+	if err != nil {
+		return fmt.Errorf("failed to fetch archive layer: %w", err)
+	}
+
+	destDir := filepath.Dir(destPath)
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return fmt.Errorf("failed to ensure destination directory: %w", err)
+	}
+
+	if err := extractTarGz(bytes.NewReader(data), destDir); err != nil {
+		return fmt.Errorf("failed to extract archive: %w", err)
+	}
+
+	if _, err := os.Stat(destPath); err != nil {
+		return fmt.Errorf("archive missing expected binary %s: %w", destPath, err)
+	}
+
+	return nil
+}
+
+func extractTarGz(reader io.Reader, destDir string) error {
+	gzipReader, err := gzip.NewReader(reader)
+	if err != nil {
+		return fmt.Errorf("failed to create gzip reader: %w", err)
+	}
+	defer func() {
+		if closeErr := gzipReader.Close(); closeErr != nil {
+			log.Warn("Failed to close gzip reader", "error", closeErr)
+		}
+	}()
+
+	tarReader := tar.NewReader(gzipReader)
+
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("failed to read archive: %w", err)
+		}
+
+		targetPath := filepath.Join(destDir, header.Name)
+		if !strings.HasPrefix(targetPath, filepath.Clean(destDir)+string(os.PathSeparator)) && filepath.Clean(targetPath) != filepath.Clean(destDir) {
+			return fmt.Errorf("archive entry %s escapes destination", header.Name)
+		}
+
+		if header.Typeflag == 0 {
+			header.Typeflag = tar.TypeReg
+		}
+
+		switch header.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(targetPath, 0755); err != nil {
+				return fmt.Errorf("failed to create directory %s: %w", targetPath, err)
+			}
+		case tar.TypeSymlink:
+			if err := os.Symlink(header.Linkname, targetPath); err != nil {
+				if !os.IsExist(err) {
+					return fmt.Errorf("failed to create symlink %s: %w", targetPath, err)
+				}
+			}
+		case tar.TypeReg:
+			if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+				return fmt.Errorf("failed to create parent directories for %s: %w", targetPath, err)
+			}
+			file, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, header.FileInfo().Mode())
+			if err != nil {
+				return fmt.Errorf("failed to create file %s: %w", targetPath, err)
+			}
+			if _, err := io.Copy(file, tarReader); err != nil {
+				_ = file.Close()
+				return fmt.Errorf("failed to write file %s: %w", targetPath, err)
+			}
+			if err := file.Close(); err != nil {
+				return fmt.Errorf("failed to close file %s: %w", targetPath, err)
+			}
+		default:
+			// Skip unsupported entry types for now
+			continue
+		}
 	}
 
 	return nil

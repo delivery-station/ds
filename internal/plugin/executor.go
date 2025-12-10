@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -74,16 +75,9 @@ func (e *Executor) ExecutePlugin(pluginName string, args []string) (int, error) 
 		return result.ExitCode, fmt.Errorf("%s", result.Error)
 	}
 
-	finalizerName := ""
-	if p.Manifest != nil && len(p.Manifest.Annotations) > 0 {
-		finalizerName = strings.TrimSpace(p.Manifest.Annotations["finalizer"])
-	}
-
-	if exitCode == 0 && finalizerName != "" && finalizerName != pluginName {
-		finalizerExit, finalizerErr := e.executeFinalizer(finalizerName)
-		if finalizerErr != nil {
-			log.Warn("Finalizer execution failed", "plugin", finalizerName, "exit_code", finalizerExit, "error", finalizerErr)
-		}
+	if exitCode == 0 {
+		finalizers := e.collectFinalizers(pluginName, p, result)
+		e.invokeFinalizers(finalizers)
 	}
 
 	return exitCode, nil
@@ -149,6 +143,11 @@ func (e *Executor) ExecutePluginWithOutput(pluginName string, args []string) (st
 		return "", "", exitCode, err
 	}
 
+	if exitCode == 0 {
+		finalizers := e.collectFinalizers(pluginName, p, result)
+		e.invokeFinalizers(finalizers)
+	}
+
 	return result.Stdout, result.Stderr, result.ExitCode, nil
 }
 
@@ -207,8 +206,18 @@ func (e *Executor) runPlugin(pluginName string, info *types.PluginInfo, args []s
 	return result, result.ExitCode, nil
 }
 
-func (e *Executor) executeFinalizer(finalizerName string) (int, error) {
-	log.Info("Executing finalizer plugin", "plugin", finalizerName)
+func (e *Executor) executeFinalizer(req types.FinalizerRequest) (int, error) {
+	finalizerName := strings.TrimSpace(req.Name)
+	if finalizerName == "" {
+		return 1, fmt.Errorf("finalizer name cannot be empty")
+	}
+
+	operation := strings.TrimSpace(req.Operation)
+	if operation == "" {
+		operation = "upload"
+	}
+
+	log.Info("Executing finalizer plugin", "plugin", finalizerName, "operation", operation)
 
 	finalizerInfo, err := e.manager.GetPlugin(finalizerName)
 	if err != nil {
@@ -221,7 +230,13 @@ func (e *Executor) executeFinalizer(finalizerName string) (int, error) {
 
 	envMap := envSliceToMap(e.PrepareEnvironment(finalizerName))
 
-	result, exitCode, err := e.runPlugin(finalizerName, finalizerInfo, []string{"upload"}, envMap)
+	args := make([]string, 0, 1+len(req.Args))
+	args = append(args, operation)
+	if len(req.Args) > 0 {
+		args = append(args, req.Args...)
+	}
+
+	result, exitCode, err := e.runPlugin(finalizerName, finalizerInfo, args, envMap)
 	if err != nil {
 		return exitCode, fmt.Errorf("finalizer plugin '%s' failed: %w", finalizerName, err)
 	}
@@ -239,7 +254,7 @@ func (e *Executor) executeFinalizer(finalizerName string) (int, error) {
 		return result.ExitCode, fmt.Errorf("finalizer plugin '%s' exited with status %d", finalizerName, result.ExitCode)
 	}
 
-	log.Info("Finalizer plugin completed", "plugin", finalizerName)
+	log.Info("Finalizer plugin completed", "plugin", finalizerName, "operation", operation)
 	return 0, nil
 }
 
@@ -254,6 +269,164 @@ func envSliceToMap(env []string) map[string]string {
 			}
 			result[key] = value
 		}
+	}
+	return result
+}
+
+func (e *Executor) invokeFinalizers(finalizers []types.FinalizerRequest) {
+	for _, finalizer := range finalizers {
+		exitCode, err := e.executeFinalizer(finalizer)
+		if err != nil {
+			log.Warn("Finalizer execution failed", "plugin", finalizer.Name, "operation", finalizer.Operation, "exit_code", exitCode, "error", err)
+		}
+	}
+}
+
+func (e *Executor) collectFinalizers(pluginName string, pluginInfo *types.PluginInfo, result *types.ExecutionResult) []types.FinalizerRequest {
+	type key struct {
+		name      string
+		operation string
+		args      string
+	}
+
+	seen := make(map[key]struct{})
+	appendFinalizer := func(f types.FinalizerRequest, output *[]types.FinalizerRequest) {
+		name := strings.TrimSpace(f.Name)
+		if name == "" {
+			return
+		}
+		if strings.EqualFold(name, strings.TrimSpace(pluginName)) {
+			return
+		}
+
+		operation := strings.TrimSpace(f.Operation)
+		if operation == "" {
+			operation = "upload"
+		}
+
+		argsCopy := append([]string{}, f.Args...)
+		for i := range argsCopy {
+			argsCopy[i] = strings.TrimSpace(argsCopy[i])
+		}
+
+		dedupKey := key{
+			name:      strings.ToLower(name),
+			operation: strings.ToLower(operation),
+			args:      strings.Join(argsCopy, "\u0000"),
+		}
+		if _, ok := seen[dedupKey]; ok {
+			return
+		}
+		seen[dedupKey] = struct{}{}
+
+		*output = append(*output, types.FinalizerRequest{
+			Name:      name,
+			Operation: operation,
+			Args:      argsCopy,
+		})
+	}
+
+	finalizers := make([]types.FinalizerRequest, 0)
+
+	if result != nil {
+		for _, f := range result.Finalizers {
+			appendFinalizer(f, &finalizers)
+		}
+
+		for _, f := range finalizersFromStdout(result.Stdout) {
+			appendFinalizer(f, &finalizers)
+		}
+	}
+
+	if len(finalizers) == 0 && pluginInfo != nil && pluginInfo.Manifest != nil {
+		if name := strings.TrimSpace(pluginInfo.Manifest.Annotations["finalizer"]); name != "" {
+			appendFinalizer(types.FinalizerRequest{Name: name}, &finalizers)
+		}
+	}
+
+	return finalizers
+}
+
+func finalizersFromStdout(stdout string) []types.FinalizerRequest {
+	trimmed := strings.TrimSpace(stdout)
+	if trimmed == "" {
+		return nil
+	}
+
+	var payload struct {
+		Metadata map[string]string `json:"metadata"`
+	}
+
+	if err := json.Unmarshal([]byte(trimmed), &payload); err != nil {
+		return nil
+	}
+
+	return finalizersFromMetadata(payload.Metadata)
+}
+
+func finalizersFromMetadata(metadata map[string]string) []types.FinalizerRequest {
+	if len(metadata) == 0 {
+		return nil
+	}
+
+	name := firstNonEmpty(metadata, "ds.finalizer", "finalizer")
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil
+	}
+
+	operation := strings.TrimSpace(firstNonEmpty(metadata, "ds.finalizer.operation", "finalizer.operation"))
+	args := parseFinalizerArgs(firstNonEmpty(metadata, "ds.finalizer.args", "finalizer.args"))
+
+	return []types.FinalizerRequest{{
+		Name:      name,
+		Operation: operation,
+		Args:      args,
+	}}
+}
+
+func firstNonEmpty(metadata map[string]string, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := metadata[k]; ok {
+			if trimmed := strings.TrimSpace(v); trimmed != "" {
+				return trimmed
+			}
+		}
+	}
+	return ""
+}
+
+func parseFinalizerArgs(raw string) []string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil
+	}
+
+	if strings.HasPrefix(trimmed, "[") {
+		var arr []string
+		if err := json.Unmarshal([]byte(trimmed), &arr); err == nil {
+			result := make([]string, 0, len(arr))
+			for _, item := range arr {
+				if val := strings.TrimSpace(item); val != "" {
+					result = append(result, val)
+				}
+			}
+			if len(result) > 0 {
+				return result
+			}
+			return nil
+		}
+	}
+
+	parts := strings.Split(trimmed, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if val := strings.TrimSpace(part); val != "" {
+			result = append(result, val)
+		}
+	}
+	if len(result) == 0 {
+		return nil
 	}
 	return result
 }

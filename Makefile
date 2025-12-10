@@ -58,6 +58,7 @@ lint: ## Run linters
 	$(GOVET) ./...
 	@echo "Checking go mod tidy..."
 	$(GOMOD) tidy
+	golangci-lint run
 	@git diff --exit-code go.mod go.sum || (echo "go.mod or go.sum needs updating" && exit 1)
 
 clean: ## Clean build artifacts

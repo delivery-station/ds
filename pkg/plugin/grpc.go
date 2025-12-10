@@ -98,11 +98,25 @@ func (m *GRPCClient) Execute(ctx context.Context, operation string, args []strin
 		return nil, err
 	}
 
+	finalizers := make([]types.FinalizerRequest, 0, len(resp.Finalizers))
+	for _, f := range resp.Finalizers {
+		if f == nil {
+			continue
+		}
+		finalizer := types.FinalizerRequest{
+			Name:      f.GetName(),
+			Operation: f.GetOperation(),
+			Args:      append([]string{}, f.GetArgs()...),
+		}
+		finalizers = append(finalizers, finalizer)
+	}
+
 	return &types.ExecutionResult{
-		Stdout:   resp.Stdout,
-		Stderr:   resp.Stderr,
-		ExitCode: int(resp.ExitCode),
-		Error:    resp.Error,
+		Stdout:     resp.Stdout,
+		Stderr:     resp.Stderr,
+		ExitCode:   int(resp.ExitCode),
+		Error:      resp.Error,
+		Finalizers: finalizers,
 	}, nil
 }
 
@@ -182,11 +196,21 @@ func (m *GRPCServer) Execute(ctx context.Context, req *ExecuteRequest) (*Execute
 	if err != nil {
 		return nil, err
 	}
+
+	finalizers := make([]*FinalizerRequest, 0, len(res.Finalizers))
+	for _, f := range res.Finalizers {
+		finalizers = append(finalizers, &FinalizerRequest{
+			Name:      f.Name,
+			Operation: f.Operation,
+			Args:      append([]string{}, f.Args...),
+		})
+	}
 	return &ExecuteResponse{
-		Stdout:   res.Stdout,
-		Stderr:   res.Stderr,
-		ExitCode: int32(res.ExitCode),
-		Error:    res.Error,
+		Stdout:     res.Stdout,
+		Stderr:     res.Stderr,
+		ExitCode:   int32(res.ExitCode),
+		Error:      res.Error,
+		Finalizers: finalizers,
 	}, nil
 }
 

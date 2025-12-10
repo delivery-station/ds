@@ -123,6 +123,18 @@ func executePlugin(pluginName string, args []string) (int, error) {
 		}
 	}
 
+	// Manually check for --config flag in os.Args
+	for i, arg := range os.Args {
+		if arg == "--config" && i+1 < len(os.Args) {
+			cfgFile = os.Args[i+1]
+			break
+		}
+		if strings.HasPrefix(arg, "--config=") {
+			cfgFile = strings.TrimPrefix(arg, "--config=")
+			break
+		}
+	}
+
 	// Initialize config manually (since PersistentPreRunE won't run for unknown commands)
 	if err := initConfig(); err != nil {
 		// Continue anyway with defaults - config errors are non-fatal for plugin execution

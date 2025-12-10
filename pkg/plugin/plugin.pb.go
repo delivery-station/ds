@@ -267,6 +267,7 @@ type ExecuteResponse struct {
 	Stderr        string                 `protobuf:"bytes,2,opt,name=stderr,proto3" json:"stderr,omitempty"`
 	ExitCode      int32                  `protobuf:"varint,3,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
 	Error         string                 `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
+	Finalizers    []*FinalizerRequest    `protobuf:"bytes,5,rep,name=finalizers,proto3" json:"finalizers,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -327,6 +328,13 @@ func (x *ExecuteResponse) GetError() string {
 		return x.Error
 	}
 	return ""
+}
+
+func (x *ExecuteResponse) GetFinalizers() []*FinalizerRequest {
+	if x != nil {
+		return x.Finalizers
+	}
+	return nil
 }
 
 type ValidateConfigRequest struct {
@@ -661,6 +669,66 @@ func (x *GetEffectiveConfigResponse) GetConfigJson() []byte {
 	return nil
 }
 
+type FinalizerRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Operation     string                 `protobuf:"bytes,2,opt,name=operation,proto3" json:"operation,omitempty"`
+	Args          []string               `protobuf:"bytes,3,rep,name=args,proto3" json:"args,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FinalizerRequest) Reset() {
+	*x = FinalizerRequest{}
+	mi := &file_pkg_plugin_plugin_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FinalizerRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FinalizerRequest) ProtoMessage() {}
+
+func (x *FinalizerRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_plugin_plugin_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FinalizerRequest.ProtoReflect.Descriptor instead.
+func (*FinalizerRequest) Descriptor() ([]byte, []int) {
+	return file_pkg_plugin_plugin_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *FinalizerRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *FinalizerRequest) GetOperation() string {
+	if x != nil {
+		return x.Operation
+	}
+	return ""
+}
+
+func (x *FinalizerRequest) GetArgs() []string {
+	if x != nil {
+		return x.Args
+	}
+	return nil
+}
+
 var File_pkg_plugin_plugin_proto protoreflect.FileDescriptor
 
 const file_pkg_plugin_plugin_proto_rawDesc = "" +
@@ -689,12 +757,15 @@ const file_pkg_plugin_plugin_proto_rawDesc = "" +
 	"\x15host_config_broker_id\x18\x04 \x01(\rR\x12hostConfigBrokerId\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"t\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xae\x01\n" +
 	"\x0fExecuteResponse\x12\x16\n" +
 	"\x06stdout\x18\x01 \x01(\tR\x06stdout\x12\x16\n" +
 	"\x06stderr\x18\x02 \x01(\tR\x06stderr\x12\x1b\n" +
 	"\texit_code\x18\x03 \x01(\x05R\bexitCode\x12\x14\n" +
-	"\x05error\x18\x04 \x01(\tR\x05error\"\x95\x01\n" +
+	"\x05error\x18\x04 \x01(\tR\x05error\x128\n" +
+	"\n" +
+	"finalizers\x18\x05 \x03(\v2\x18.plugin.FinalizerRequestR\n" +
+	"finalizers\"\x95\x01\n" +
 	"\x15ValidateConfigRequest\x12A\n" +
 	"\x06config\x18\x01 \x03(\v2).plugin.ValidateConfigRequest.ConfigEntryR\x06config\x1a9\n" +
 	"\vConfigEntry\x12\x10\n" +
@@ -720,7 +791,11 @@ const file_pkg_plugin_plugin_proto_rawDesc = "" +
 	"\x19GetEffectiveConfigRequest\"=\n" +
 	"\x1aGetEffectiveConfigResponse\x12\x1f\n" +
 	"\vconfig_json\x18\x01 \x01(\fR\n" +
-	"configJson2\xa1\x02\n" +
+	"configJson\"X\n" +
+	"\x10FinalizerRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
+	"\toperation\x18\x02 \x01(\tR\toperation\x12\x12\n" +
+	"\x04args\x18\x03 \x03(\tR\x04args2\xa1\x02\n" +
 	"\bDSPlugin\x12F\n" +
 	"\vGetMetadata\x12\x1a.plugin.GetMetadataRequest\x1a\x1b.plugin.GetMetadataResponse\x12:\n" +
 	"\aExecute\x12\x16.plugin.ExecuteRequest\x1a\x17.plugin.ExecuteResponse\x12O\n" +
@@ -742,7 +817,7 @@ func file_pkg_plugin_plugin_proto_rawDescGZIP() []byte {
 	return file_pkg_plugin_plugin_proto_rawDescData
 }
 
-var file_pkg_plugin_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_pkg_plugin_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_pkg_plugin_plugin_proto_goTypes = []any{
 	(*GetMetadataRequest)(nil),         // 0: plugin.GetMetadataRequest
 	(*GetMetadataResponse)(nil),        // 1: plugin.GetMetadataResponse
@@ -756,33 +831,35 @@ var file_pkg_plugin_plugin_proto_goTypes = []any{
 	(*SchemaProperty)(nil),             // 9: plugin.SchemaProperty
 	(*GetEffectiveConfigRequest)(nil),  // 10: plugin.GetEffectiveConfigRequest
 	(*GetEffectiveConfigResponse)(nil), // 11: plugin.GetEffectiveConfigResponse
-	nil,                                // 12: plugin.GetMetadataResponse.ConfigEntry
-	nil,                                // 13: plugin.ExecuteRequest.EnvEntry
-	nil,                                // 14: plugin.ValidateConfigRequest.ConfigEntry
-	nil,                                // 15: plugin.GetSchemaResponse.PropertiesEntry
+	(*FinalizerRequest)(nil),           // 12: plugin.FinalizerRequest
+	nil,                                // 13: plugin.GetMetadataResponse.ConfigEntry
+	nil,                                // 14: plugin.ExecuteRequest.EnvEntry
+	nil,                                // 15: plugin.ValidateConfigRequest.ConfigEntry
+	nil,                                // 16: plugin.GetSchemaResponse.PropertiesEntry
 }
 var file_pkg_plugin_plugin_proto_depIdxs = []int32{
 	2,  // 0: plugin.GetMetadataResponse.platform:type_name -> plugin.Platform
-	12, // 1: plugin.GetMetadataResponse.config:type_name -> plugin.GetMetadataResponse.ConfigEntry
-	13, // 2: plugin.ExecuteRequest.env:type_name -> plugin.ExecuteRequest.EnvEntry
-	14, // 3: plugin.ValidateConfigRequest.config:type_name -> plugin.ValidateConfigRequest.ConfigEntry
-	15, // 4: plugin.GetSchemaResponse.properties:type_name -> plugin.GetSchemaResponse.PropertiesEntry
-	9,  // 5: plugin.GetSchemaResponse.PropertiesEntry.value:type_name -> plugin.SchemaProperty
-	0,  // 6: plugin.DSPlugin.GetMetadata:input_type -> plugin.GetMetadataRequest
-	3,  // 7: plugin.DSPlugin.Execute:input_type -> plugin.ExecuteRequest
-	5,  // 8: plugin.DSPlugin.ValidateConfig:input_type -> plugin.ValidateConfigRequest
-	7,  // 9: plugin.DSPlugin.GetSchema:input_type -> plugin.GetSchemaRequest
-	10, // 10: plugin.HostConfig.GetEffectiveConfig:input_type -> plugin.GetEffectiveConfigRequest
-	1,  // 11: plugin.DSPlugin.GetMetadata:output_type -> plugin.GetMetadataResponse
-	4,  // 12: plugin.DSPlugin.Execute:output_type -> plugin.ExecuteResponse
-	6,  // 13: plugin.DSPlugin.ValidateConfig:output_type -> plugin.ValidateConfigResponse
-	8,  // 14: plugin.DSPlugin.GetSchema:output_type -> plugin.GetSchemaResponse
-	11, // 15: plugin.HostConfig.GetEffectiveConfig:output_type -> plugin.GetEffectiveConfigResponse
-	11, // [11:16] is the sub-list for method output_type
-	6,  // [6:11] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	13, // 1: plugin.GetMetadataResponse.config:type_name -> plugin.GetMetadataResponse.ConfigEntry
+	14, // 2: plugin.ExecuteRequest.env:type_name -> plugin.ExecuteRequest.EnvEntry
+	12, // 3: plugin.ExecuteResponse.finalizers:type_name -> plugin.FinalizerRequest
+	15, // 4: plugin.ValidateConfigRequest.config:type_name -> plugin.ValidateConfigRequest.ConfigEntry
+	16, // 5: plugin.GetSchemaResponse.properties:type_name -> plugin.GetSchemaResponse.PropertiesEntry
+	9,  // 6: plugin.GetSchemaResponse.PropertiesEntry.value:type_name -> plugin.SchemaProperty
+	0,  // 7: plugin.DSPlugin.GetMetadata:input_type -> plugin.GetMetadataRequest
+	3,  // 8: plugin.DSPlugin.Execute:input_type -> plugin.ExecuteRequest
+	5,  // 9: plugin.DSPlugin.ValidateConfig:input_type -> plugin.ValidateConfigRequest
+	7,  // 10: plugin.DSPlugin.GetSchema:input_type -> plugin.GetSchemaRequest
+	10, // 11: plugin.HostConfig.GetEffectiveConfig:input_type -> plugin.GetEffectiveConfigRequest
+	1,  // 12: plugin.DSPlugin.GetMetadata:output_type -> plugin.GetMetadataResponse
+	4,  // 13: plugin.DSPlugin.Execute:output_type -> plugin.ExecuteResponse
+	6,  // 14: plugin.DSPlugin.ValidateConfig:output_type -> plugin.ValidateConfigResponse
+	8,  // 15: plugin.DSPlugin.GetSchema:output_type -> plugin.GetSchemaResponse
+	11, // 16: plugin.HostConfig.GetEffectiveConfig:output_type -> plugin.GetEffectiveConfigResponse
+	12, // [12:17] is the sub-list for method output_type
+	7,  // [7:12] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_pkg_plugin_plugin_proto_init() }
@@ -796,7 +873,7 @@ func file_pkg_plugin_plugin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pkg_plugin_plugin_proto_rawDesc), len(file_pkg_plugin_plugin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   16,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

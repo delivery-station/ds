@@ -33,10 +33,18 @@ type PluginMetadata struct {
 
 // ExecutionResult contains the result of a plugin execution
 type ExecutionResult struct {
-	Stdout   string `json:"stdout"`
-	Stderr   string `json:"stderr"`
-	ExitCode int    `json:"exit_code"`
-	Error    string `json:"error,omitempty"`
+	Stdout     string             `json:"stdout"`
+	Stderr     string             `json:"stderr"`
+	ExitCode   int                `json:"exit_code"`
+	Error      string             `json:"error,omitempty"`
+	Finalizers []FinalizerRequest `json:"finalizers,omitempty"`
+}
+
+// FinalizerRequest tells the DS host to invoke another plugin after a successful run.
+type FinalizerRequest struct {
+	Name      string   `json:"name"`
+	Operation string   `json:"operation"`
+	Args      []string `json:"args,omitempty"`
 }
 
 // PluginSchema describes the configuration schema

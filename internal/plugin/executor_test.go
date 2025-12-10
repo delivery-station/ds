@@ -355,7 +355,9 @@ func main() {
 	if err := os.Setenv("FINALIZER_OUTPUT", outputFile); err != nil {
 		t.Fatalf("failed to set environment: %v", err)
 	}
-	defer os.Unsetenv("FINALIZER_OUTPUT")
+	defer func() {
+		_ = os.Unsetenv("FINALIZER_OUTPUT")
+	}()
 
 	exitCode, err := executor.ExecutePlugin("primary", []string{"run"})
 	if err != nil {
