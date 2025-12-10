@@ -47,25 +47,6 @@ type GRPCClient struct {
 	broker *plugin.GRPCBroker
 }
 
-func (m *GRPCClient) GetMetadata(ctx context.Context) (*types.PluginMetadata, error) {
-	resp, err := m.client.GetMetadata(ctx, &GetMetadataRequest{})
-	if err != nil {
-		return nil, err
-	}
-
-	return &types.PluginMetadata{
-		Name:        resp.Name,
-		Version:     resp.Version,
-		Description: resp.Description,
-		Operations:  resp.Operations,
-		Platform: types.PluginPlatform{
-			OS:   resp.Platform.Os,
-			Arch: resp.Platform.Arch,
-		},
-		Config: resp.Config,
-	}, nil
-}
-
 func (m *GRPCClient) GetManifest(ctx context.Context) (*types.PluginManifest, error) {
 	resp, err := m.client.GetManifest(ctx, &GetManifestRequest{})
 	if err != nil {
@@ -210,24 +191,6 @@ type GRPCServer struct {
 	UnimplementedDSPluginServer
 	Impl   types.PluginProtocol
 	broker *plugin.GRPCBroker
-}
-
-func (m *GRPCServer) GetMetadata(ctx context.Context, req *GetMetadataRequest) (*GetMetadataResponse, error) {
-	meta, err := m.Impl.GetMetadata(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return &GetMetadataResponse{
-		Name:        meta.Name,
-		Version:     meta.Version,
-		Description: meta.Description,
-		Operations:  meta.Operations,
-		Platform: &Platform{
-			Os:   meta.Platform.OS,
-			Arch: meta.Platform.Arch,
-		},
-		Config: meta.Config,
-	}, nil
 }
 
 func (m *GRPCServer) GetManifest(ctx context.Context, req *GetManifestRequest) (*GetManifestResponse, error) {

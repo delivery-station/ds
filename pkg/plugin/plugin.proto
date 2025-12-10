@@ -6,7 +6,6 @@ option go_package = "github.com/delivery-station/ds/pkg/plugin";
 
 // DSPlugin service definition
 service DSPlugin {
-  rpc GetMetadata(GetMetadataRequest) returns (GetMetadataResponse);
   rpc GetManifest(GetManifestRequest) returns (GetManifestResponse);
   rpc Execute(ExecuteRequest) returns (ExecuteResponse);
   rpc ValidateConfig(ValidateConfigRequest) returns (ValidateConfigResponse);
@@ -16,17 +15,6 @@ service DSPlugin {
 // HostConfig exposes host-provided configuration to plugins over the gRPC broker
 service HostConfig {
   rpc GetEffectiveConfig(GetEffectiveConfigRequest) returns (GetEffectiveConfigResponse);
-}
-
-message GetMetadataRequest {}
-
-message GetMetadataResponse {
-  string name = 1;
-  string version = 2;
-  string description = 3;
-  repeated string operations = 4;
-  Platform platform = 5;
-  map<string, string> config = 6;
 }
 
 message GetManifestRequest {}

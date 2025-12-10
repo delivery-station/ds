@@ -171,13 +171,6 @@ import (
 
 type TestPlugin struct{}
 
-func (p *TestPlugin) GetMetadata(ctx context.Context) (*types.PluginMetadata, error) {
-	return &types.PluginMetadata{
-		Name:    "testexec",
-		Version: "1.0.0",
-	}, nil
-}
-
 func (p *TestPlugin) Execute(ctx context.Context, operation string, args []string, env map[string]string) (*types.ExecutionResult, error) {
 	return &types.ExecutionResult{
 		Stdout:   "Hello from plugin\n",
@@ -191,6 +184,20 @@ func (p *TestPlugin) ValidateConfig(ctx context.Context, config map[string]inter
 
 func (p *TestPlugin) GetSchema(ctx context.Context) (*types.PluginSchema, error) {
 	return &types.PluginSchema{}, nil
+}
+
+func (p *TestPlugin) GetManifest(ctx context.Context) (*types.PluginManifest, error) {
+	return &types.PluginManifest{
+		Name:    "testexec",
+		Version: "1.0.0",
+		Platform: types.PluginPlatform{
+			OS:   []string{"linux", "darwin", "windows"},
+			Arch: []string{"amd64", "arm64"},
+		},
+		Commands: []types.PluginCommand{
+			{Name: "run", Description: "Run command"},
+		},
+	}, nil
 }
 
 func main() {
@@ -242,6 +249,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
 
 	"github.com/delivery-station/ds/pkg/plugin"
 	"github.com/delivery-station/ds/pkg/types"
@@ -249,10 +257,6 @@ import (
 )
 
 type FinalizerPlugin struct{}
-
-func (p *FinalizerPlugin) GetMetadata(ctx context.Context) (*types.PluginMetadata, error) {
-	return &types.PluginMetadata{Name: "finalizer", Version: "1.0.0"}, nil
-}
 
 func (p *FinalizerPlugin) Execute(ctx context.Context, operation string, args []string, env map[string]string) (*types.ExecutionResult, error) {
 	if operation != "upload" {
@@ -279,6 +283,20 @@ func (p *FinalizerPlugin) GetSchema(ctx context.Context) (*types.PluginSchema, e
 	return &types.PluginSchema{}, nil
 }
 
+func (p *FinalizerPlugin) GetManifest(ctx context.Context) (*types.PluginManifest, error) {
+	return &types.PluginManifest{
+		Name:    "finalizer",
+		Version: "1.0.0",
+		Platform: types.PluginPlatform{
+			OS:   []string{runtime.GOOS},
+			Arch: []string{runtime.GOARCH},
+		},
+		Commands: []types.PluginCommand{
+			{Name: "upload"},
+		},
+	}, nil
+}
+
 func main() {
 	goplugin.Serve(&goplugin.ServeConfig{
 		HandshakeConfig: plugin.Handshake,
@@ -301,6 +319,7 @@ func main() {
 
 import (
 	"context"
+	"runtime"
 
 	"github.com/delivery-station/ds/pkg/plugin"
 	"github.com/delivery-station/ds/pkg/types"
@@ -308,10 +327,6 @@ import (
 )
 
 type PrimaryPlugin struct{}
-
-func (p *PrimaryPlugin) GetMetadata(ctx context.Context) (*types.PluginMetadata, error) {
-	return &types.PluginMetadata{Name: "primary", Version: "1.0.0"}, nil
-}
 
 func (p *PrimaryPlugin) Execute(ctx context.Context, operation string, args []string, env map[string]string) (*types.ExecutionResult, error) {
 	if operation != "run" {
@@ -326,6 +341,23 @@ func (p *PrimaryPlugin) ValidateConfig(ctx context.Context, config map[string]in
 
 func (p *PrimaryPlugin) GetSchema(ctx context.Context) (*types.PluginSchema, error) {
 	return &types.PluginSchema{}, nil
+}
+
+func (p *PrimaryPlugin) GetManifest(ctx context.Context) (*types.PluginManifest, error) {
+	return &types.PluginManifest{
+		Name:    "primary",
+		Version: "1.0.0",
+		Platform: types.PluginPlatform{
+			OS:   []string{runtime.GOOS},
+			Arch: []string{runtime.GOARCH},
+		},
+		Commands: []types.PluginCommand{
+			{Name: "run"},
+		},
+		Annotations: map[string]string{
+			"finalizer": "finalizer",
+		},
+	}, nil
 }
 
 func main() {
@@ -384,6 +416,7 @@ func TestExecutePlugin_FinalizerMissingIsOptional(t *testing.T) {
 
 import (
 	"context"
+	"runtime"
 
 	"github.com/delivery-station/ds/pkg/plugin"
 	"github.com/delivery-station/ds/pkg/types"
@@ -391,10 +424,6 @@ import (
 )
 
 type PrimaryPlugin struct{}
-
-func (p *PrimaryPlugin) GetMetadata(ctx context.Context) (*types.PluginMetadata, error) {
-	return &types.PluginMetadata{Name: "primary", Version: "1.0.0"}, nil
-}
 
 func (p *PrimaryPlugin) Execute(ctx context.Context, operation string, args []string, env map[string]string) (*types.ExecutionResult, error) {
 	if operation != "run" {
@@ -409,6 +438,20 @@ func (p *PrimaryPlugin) ValidateConfig(ctx context.Context, config map[string]in
 
 func (p *PrimaryPlugin) GetSchema(ctx context.Context) (*types.PluginSchema, error) {
 	return &types.PluginSchema{}, nil
+}
+
+func (p *PrimaryPlugin) GetManifest(ctx context.Context) (*types.PluginManifest, error) {
+	return &types.PluginManifest{
+		Name:    "primary",
+		Version: "1.0.0",
+		Platform: types.PluginPlatform{
+			OS:   []string{runtime.GOOS},
+			Arch: []string{runtime.GOARCH},
+		},
+		Commands: []types.PluginCommand{
+			{Name: "run"},
+		},
+	}, nil
 }
 
 func main() {
@@ -458,13 +501,6 @@ import (
 
 type TestPlugin struct{}
 
-func (p *TestPlugin) GetMetadata(ctx context.Context) (*types.PluginMetadata, error) {
-	return &types.PluginMetadata{
-		Name:    "failplugin",
-		Version: "1.0.0",
-	}, nil
-}
-
 func (p *TestPlugin) Execute(ctx context.Context, operation string, args []string, env map[string]string) (*types.ExecutionResult, error) {
 	return &types.ExecutionResult{
 		ExitCode: 42,
@@ -477,6 +513,18 @@ func (p *TestPlugin) ValidateConfig(ctx context.Context, config map[string]inter
 
 func (p *TestPlugin) GetSchema(ctx context.Context) (*types.PluginSchema, error) {
 	return &types.PluginSchema{}, nil
+}
+
+func (p *TestPlugin) GetManifest(ctx context.Context) (*types.PluginManifest, error) {
+	return &types.PluginManifest{
+		Name:    "failplugin",
+		Version: "1.0.0",
+		Commands: []types.PluginCommand{{Name: "run"}},
+		Platform: types.PluginPlatform{
+			OS:   []string{"linux", "darwin", "windows"},
+			Arch: []string{"amd64", "arm64"},
+		},
+	}, nil
 }
 
 func main() {
@@ -531,13 +579,6 @@ import (
 
 type TestPlugin struct{}
 
-func (p *TestPlugin) GetMetadata(ctx context.Context) (*types.PluginMetadata, error) {
-	return &types.PluginMetadata{
-		Name:    "outputplugin",
-		Version: "1.0.0",
-	}, nil
-}
-
 func (p *TestPlugin) Execute(ctx context.Context, operation string, args []string, env map[string]string) (*types.ExecutionResult, error) {
 	return &types.ExecutionResult{
 		Stdout:   "stdout message",
@@ -552,6 +593,18 @@ func (p *TestPlugin) ValidateConfig(ctx context.Context, config map[string]inter
 
 func (p *TestPlugin) GetSchema(ctx context.Context) (*types.PluginSchema, error) {
 	return &types.PluginSchema{}, nil
+}
+
+func (p *TestPlugin) GetManifest(ctx context.Context) (*types.PluginManifest, error) {
+	return &types.PluginManifest{
+		Name:    "outputplugin",
+		Version: "1.0.0",
+		Commands: []types.PluginCommand{{Name: "run"}},
+		Platform: types.PluginPlatform{
+			OS:   []string{"linux", "darwin", "windows"},
+			Arch: []string{"amd64", "arm64"},
+		},
+	}, nil
 }
 
 func main() {
@@ -619,13 +672,6 @@ import (
 
 type TestPlugin struct{}
 
-func (p *TestPlugin) GetMetadata(ctx context.Context) (*types.PluginMetadata, error) {
-	return &types.PluginMetadata{
-		Name:    "slowplugin",
-		Version: "1.0.0",
-	}, nil
-}
-
 func (p *TestPlugin) Execute(ctx context.Context, operation string, args []string, env map[string]string) (*types.ExecutionResult, error) {
 	time.Sleep(10 * time.Second)
 	return &types.ExecutionResult{
@@ -639,6 +685,18 @@ func (p *TestPlugin) ValidateConfig(ctx context.Context, config map[string]inter
 
 func (p *TestPlugin) GetSchema(ctx context.Context) (*types.PluginSchema, error) {
 	return &types.PluginSchema{}, nil
+}
+
+func (p *TestPlugin) GetManifest(ctx context.Context) (*types.PluginManifest, error) {
+	return &types.PluginManifest{
+		Name:    "slowplugin",
+		Version: "1.0.0",
+		Commands: []types.PluginCommand{{Name: "run"}},
+		Platform: types.PluginPlatform{
+			OS:   []string{"linux", "darwin", "windows"},
+			Arch: []string{"amd64", "arm64"},
+		},
+	}, nil
 }
 
 func main() {

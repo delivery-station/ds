@@ -7,9 +7,6 @@ import (
 // PluginProtocol defines the RPC interface for DS plugins
 // This interface will be implemented by all plugins and exposed via go-plugin
 type PluginProtocol interface {
-	// GetMetadata returns plugin metadata (name, version, description, etc.)
-	GetMetadata(ctx context.Context) (*PluginMetadata, error)
-
 	// Execute runs a plugin operation with given arguments
 	// Returns output (stdout), error output (stderr), and exit code
 	Execute(ctx context.Context, operation string, args []string, env map[string]string) (*ExecutionResult, error)
@@ -24,16 +21,6 @@ type PluginProtocol interface {
 // PluginManifestProvider can be implemented by plugins that expose a manifest over RPC.
 type PluginManifestProvider interface {
 	GetManifest(ctx context.Context) (*PluginManifest, error)
-}
-
-// PluginMetadata contains plugin information
-type PluginMetadata struct {
-	Name        string            `json:"name"`
-	Version     string            `json:"version"`
-	Description string            `json:"description"`
-	Operations  []string          `json:"operations"`
-	Platform    PluginPlatform    `json:"platform"`
-	Config      map[string]string `json:"config,omitempty"`
 }
 
 // ExecutionResult contains the result of a plugin execution

@@ -268,17 +268,27 @@ func (m *Manager) getPluginVersion(pluginPath string) (string, error) {
 // loadPluginManifest loads the plugin manifest file
 
 func (m *Manager) loadPluginManifest(pluginPath string) (*types.PluginManifest, error) {
-	manifest, err := m.fetchPluginManifest(pluginPath)
-	if err == nil {
+	manifest, rpcErr := m.fetchPluginManifest(pluginPath)
+	if rpcErr == nil {
 		return manifest, nil
 	}
 
-	if errors.Is(err, errManifestRPCUnsupported) {
+	if errors.Is(rpcErr, errManifestRPCUnsupported) {
 		log.Debug("Plugin does not expose manifest RPC", "path", pluginPath)
 	} else {
-		log.Debug("Failed to fetch manifest via RPC", "path", pluginPath, "error", err)
+		log.Debug("Failed to fetch manifest via RPC", "path", pluginPath, "error", rpcErr)
 	}
-	return nil, err
+
+	manifest, fileErr := m.loadManifestFromFile(pluginPath)
+	if fileErr == nil {
+		return manifest, nil
+	}
+
+	if errors.Is(rpcErr, errManifestRPCUnsupported) {
+		return nil, fileErr
+	}
+
+	return nil, fmt.Errorf("manifest RPC failed: %w (file fallback: %v)", rpcErr, fileErr)
 }
 
 func (m *Manager) fetchPluginManifest(pluginPath string) (*types.PluginManifest, error) {
@@ -355,6 +365,42 @@ func (m *Manager) fetchPluginManifest(pluginPath string) (*types.PluginManifest,
 	}
 
 	return clone, nil
+}
+
+func (m *Manager) loadManifestFromFile(pluginPath string) (*types.PluginManifest, error) {
+	pluginBinary := filepath.Base(pluginPath)
+	pluginBinary = strings.TrimSuffix(pluginBinary, filepath.Ext(pluginBinary))
+
+	candidates := []string{
+		pluginBinary + ".json",
+		pluginBinary + ".yaml",
+		pluginBinary + ".yml",
+	}
+
+	var lastErr error
+	for _, candidate := range candidates {
+		manifestPath := filepath.Join(filepath.Dir(pluginPath), candidate)
+		manifest, err := loadPluginManifest(manifestPath)
+		if err == nil {
+			return manifest, nil
+		}
+		if errors.Is(err, os.ErrNotExist) {
+			lastErr = err
+			continue
+		}
+		lastErr = err
+		break
+	}
+
+	if lastErr == nil {
+		return nil, fmt.Errorf("manifest file not found for plugin binary %s", pluginBinary)
+	}
+
+	if errors.Is(lastErr, os.ErrNotExist) {
+		return nil, fmt.Errorf("manifest file not found for plugin binary %s", pluginBinary)
+	}
+
+	return nil, fmt.Errorf("failed to load manifest for plugin %s: %w", pluginBinary, lastErr)
 }
 
 // isCompatiblePlatform checks if the plugin is compatible with current platform
