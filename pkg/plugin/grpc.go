@@ -89,7 +89,7 @@ func (m *GRPCClient) GetManifest(ctx context.Context) (*types.PluginManifest, er
 	return manifest, nil
 }
 
-func (m *GRPCClient) Execute(ctx context.Context, operation string, args []string, env map[string]string) (*types.ExecutionResult, error) {
+func (m *GRPCClient) Execute(ctx context.Context, operation string, args []string) (*types.ExecutionResult, error) {
 	var brokerID uint32
 
 	if m.broker != nil {
@@ -116,7 +116,6 @@ func (m *GRPCClient) Execute(ctx context.Context, operation string, args []strin
 	resp, err := m.client.Execute(ctx, &ExecuteRequest{
 		Operation:          operation,
 		Args:               args,
-		Env:                env,
 		HostConfigBrokerId: brokerID,
 	})
 	if err != nil {
@@ -248,7 +247,7 @@ func (m *GRPCServer) Execute(ctx context.Context, req *ExecuteRequest) (*Execute
 		ctx = types.WithHostConfigProvider(ctx, provider)
 	}
 
-	res, err := m.Impl.Execute(ctx, req.Operation, req.Args, req.Env)
+	res, err := m.Impl.Execute(ctx, req.Operation, req.Args)
 	if err != nil {
 		return nil, err
 	}

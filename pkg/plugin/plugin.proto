@@ -41,8 +41,7 @@ message Platform {
 message ExecuteRequest {
   string operation = 1;
   repeated string args = 2;
-  map<string, string> env = 3;
-  uint32 host_config_broker_id = 4;
+  uint32 host_config_broker_id = 3;
 }
 
 message ExecuteResponse {

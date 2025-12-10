@@ -9,7 +9,7 @@ import (
 type PluginProtocol interface {
 	// Execute runs a plugin operation with given arguments
 	// Returns output (stdout), error output (stderr), and exit code
-	Execute(ctx context.Context, operation string, args []string, env map[string]string) (*ExecutionResult, error)
+	Execute(ctx context.Context, operation string, args []string) (*ExecutionResult, error)
 
 	// ValidateConfig validates plugin configuration
 	ValidateConfig(ctx context.Context, config map[string]interface{}) error

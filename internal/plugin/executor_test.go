@@ -5,9 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"runtime"
-	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -116,26 +114,6 @@ func TestSetTimeout(t *testing.T) {
 	}
 }
 
-func TestPrepareEnvironment(t *testing.T) {
-	tmpDir := t.TempDir()
-	mgr := NewManager(tmpDir)
-	executor := NewExecutor(mgr, nil)
-
-	env := executor.PrepareEnvironment("test-plugin")
-	if len(env) == 0 {
-		t.Fatal("expected env vars to be set")
-	}
-
-	expected := os.Environ()
-
-	sort.Strings(env)
-	sort.Strings(expected)
-
-	if !reflect.DeepEqual(env, expected) {
-		t.Fatalf("environment mismatch: expected %v, got %v", expected, env)
-	}
-}
-
 func TestExecutePlugin_NotFound(t *testing.T) {
 	tmpDir := t.TempDir()
 	mgr := NewManager(tmpDir)
@@ -171,7 +149,7 @@ import (
 
 type TestPlugin struct{}
 
-func (p *TestPlugin) Execute(ctx context.Context, operation string, args []string, env map[string]string) (*types.ExecutionResult, error) {
+func (p *TestPlugin) Execute(ctx context.Context, operation string, args []string) (*types.ExecutionResult, error) {
 	return &types.ExecutionResult{
 		Stdout:   "Hello from plugin\n",
 		ExitCode: 0,
@@ -258,14 +236,14 @@ import (
 
 type FinalizerPlugin struct{}
 
-func (p *FinalizerPlugin) Execute(ctx context.Context, operation string, args []string, env map[string]string) (*types.ExecutionResult, error) {
+func (p *FinalizerPlugin) Execute(ctx context.Context, operation string, args []string) (*types.ExecutionResult, error) {
 	if operation != "upload" {
 		return &types.ExecutionResult{ExitCode: 1, Error: fmt.Sprintf("unexpected operation: %s", operation)}, nil
 	}
 	if len(args) != 0 {
 		return &types.ExecutionResult{ExitCode: 1, Error: "unexpected arguments"}, nil
 	}
-	dest := env["FINALIZER_OUTPUT"]
+	dest := os.Getenv("FINALIZER_OUTPUT")
 	if dest == "" {
 		return &types.ExecutionResult{ExitCode: 1, Error: "FINALIZER_OUTPUT not set"}, nil
 	}
@@ -328,7 +306,7 @@ import (
 
 type PrimaryPlugin struct{}
 
-func (p *PrimaryPlugin) Execute(ctx context.Context, operation string, args []string, env map[string]string) (*types.ExecutionResult, error) {
+func (p *PrimaryPlugin) Execute(ctx context.Context, operation string, args []string) (*types.ExecutionResult, error) {
 	if operation != "run" {
 		return &types.ExecutionResult{ExitCode: 1, Error: "unexpected operation"}, nil
 	}
@@ -425,7 +403,7 @@ import (
 
 type PrimaryPlugin struct{}
 
-func (p *PrimaryPlugin) Execute(ctx context.Context, operation string, args []string, env map[string]string) (*types.ExecutionResult, error) {
+func (p *PrimaryPlugin) Execute(ctx context.Context, operation string, args []string) (*types.ExecutionResult, error) {
 	if operation != "run" {
 		return &types.ExecutionResult{ExitCode: 1, Error: "unexpected operation"}, nil
 	}
@@ -501,7 +479,7 @@ import (
 
 type TestPlugin struct{}
 
-func (p *TestPlugin) Execute(ctx context.Context, operation string, args []string, env map[string]string) (*types.ExecutionResult, error) {
+func (p *TestPlugin) Execute(ctx context.Context, operation string, args []string) (*types.ExecutionResult, error) {
 	return &types.ExecutionResult{
 		ExitCode: 42,
 	}, nil
@@ -579,7 +557,7 @@ import (
 
 type TestPlugin struct{}
 
-func (p *TestPlugin) Execute(ctx context.Context, operation string, args []string, env map[string]string) (*types.ExecutionResult, error) {
+func (p *TestPlugin) Execute(ctx context.Context, operation string, args []string) (*types.ExecutionResult, error) {
 	return &types.ExecutionResult{
 		Stdout:   "stdout message",
 		Stderr:   "stderr message",
@@ -672,7 +650,7 @@ import (
 
 type TestPlugin struct{}
 
-func (p *TestPlugin) Execute(ctx context.Context, operation string, args []string, env map[string]string) (*types.ExecutionResult, error) {
+func (p *TestPlugin) Execute(ctx context.Context, operation string, args []string) (*types.ExecutionResult, error) {
 	time.Sleep(10 * time.Second)
 	return &types.ExecutionResult{
 		ExitCode: 0,

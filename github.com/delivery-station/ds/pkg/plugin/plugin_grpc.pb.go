@@ -19,7 +19,6 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	DSPlugin_GetMetadata_FullMethodName    = "/plugin.DSPlugin/GetMetadata"
 	DSPlugin_GetManifest_FullMethodName    = "/plugin.DSPlugin/GetManifest"
 	DSPlugin_Execute_FullMethodName        = "/plugin.DSPlugin/Execute"
 	DSPlugin_ValidateConfig_FullMethodName = "/plugin.DSPlugin/ValidateConfig"
@@ -32,7 +31,6 @@ const (
 //
 // DSPlugin service definition
 type DSPluginClient interface {
-	GetMetadata(ctx context.Context, in *GetMetadataRequest, opts ...grpc.CallOption) (*GetMetadataResponse, error)
 	GetManifest(ctx context.Context, in *GetManifestRequest, opts ...grpc.CallOption) (*GetManifestResponse, error)
 	Execute(ctx context.Context, in *ExecuteRequest, opts ...grpc.CallOption) (*ExecuteResponse, error)
 	ValidateConfig(ctx context.Context, in *ValidateConfigRequest, opts ...grpc.CallOption) (*ValidateConfigResponse, error)
@@ -45,16 +43,6 @@ type dSPluginClient struct {
 
 func NewDSPluginClient(cc grpc.ClientConnInterface) DSPluginClient {
 	return &dSPluginClient{cc}
-}
-
-func (c *dSPluginClient) GetMetadata(ctx context.Context, in *GetMetadataRequest, opts ...grpc.CallOption) (*GetMetadataResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetMetadataResponse)
-	err := c.cc.Invoke(ctx, DSPlugin_GetMetadata_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
 }
 
 func (c *dSPluginClient) GetManifest(ctx context.Context, in *GetManifestRequest, opts ...grpc.CallOption) (*GetManifestResponse, error) {
@@ -103,7 +91,6 @@ func (c *dSPluginClient) GetSchema(ctx context.Context, in *GetSchemaRequest, op
 //
 // DSPlugin service definition
 type DSPluginServer interface {
-	GetMetadata(context.Context, *GetMetadataRequest) (*GetMetadataResponse, error)
 	GetManifest(context.Context, *GetManifestRequest) (*GetManifestResponse, error)
 	Execute(context.Context, *ExecuteRequest) (*ExecuteResponse, error)
 	ValidateConfig(context.Context, *ValidateConfigRequest) (*ValidateConfigResponse, error)
@@ -118,9 +105,6 @@ type DSPluginServer interface {
 // pointer dereference when methods are called.
 type UnimplementedDSPluginServer struct{}
 
-func (UnimplementedDSPluginServer) GetMetadata(context.Context, *GetMetadataRequest) (*GetMetadataResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetMetadata not implemented")
-}
 func (UnimplementedDSPluginServer) GetManifest(context.Context, *GetManifestRequest) (*GetManifestResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetManifest not implemented")
 }
@@ -152,24 +136,6 @@ func RegisterDSPluginServer(s grpc.ServiceRegistrar, srv DSPluginServer) {
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&DSPlugin_ServiceDesc, srv)
-}
-
-func _DSPlugin_GetMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetMetadataRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(DSPluginServer).GetMetadata(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: DSPlugin_GetMetadata_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DSPluginServer).GetMetadata(ctx, req.(*GetMetadataRequest))
-	}
-	return interceptor(ctx, in, info, handler)
 }
 
 func _DSPlugin_GetManifest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -251,10 +217,6 @@ var DSPlugin_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "plugin.DSPlugin",
 	HandlerType: (*DSPluginServer)(nil),
 	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "GetMetadata",
-			Handler:    _DSPlugin_GetMetadata_Handler,
-		},
 		{
 			MethodName: "GetManifest",
 			Handler:    _DSPlugin_GetManifest_Handler,
