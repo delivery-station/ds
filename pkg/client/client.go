@@ -12,6 +12,7 @@ import (
 	"github.com/delivery-station/ds/internal/config"
 	"github.com/delivery-station/ds/internal/plugin"
 	"github.com/delivery-station/ds/internal/registry"
+	"github.com/delivery-station/ds/pkg/log"
 	"github.com/delivery-station/ds/pkg/types"
 	"github.com/hashicorp/go-hclog"
 )
@@ -34,10 +35,7 @@ type Option func(*Client) error
 // NewClient creates a new delivery station client
 func NewClient(opts ...Option) (*Client, error) {
 	c := &Client{
-		logger: hclog.New(&hclog.LoggerOptions{
-			Name:  "ds-client",
-			Level: hclog.Info,
-		}),
+		logger: log.Named("client"),
 	}
 
 	for _, opt := range opts {

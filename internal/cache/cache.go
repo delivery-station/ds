@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/delivery-station/ds/pkg/log"
 	"github.com/hashicorp/go-hclog"
 )
 
@@ -38,10 +39,7 @@ type CacheEntry struct {
 // NewCache creates a new cache instance
 func NewCache(dir string, maxSize int64, ttl time.Duration, logger hclog.Logger) (*Cache, error) {
 	if logger == nil {
-		logger = hclog.New(&hclog.LoggerOptions{
-			Name:  "cache",
-			Level: hclog.Info,
-		})
+		logger = log.Named("cache")
 	}
 
 	// Ensure cache directory exists

@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/delivery-station/ds/pkg/log"
 	"github.com/hashicorp/go-hclog"
 )
 
@@ -44,10 +45,7 @@ type EventBus struct {
 // NewEventBus creates a new event bus
 func NewEventBus(logger hclog.Logger, bufferSize int) *EventBus {
 	if logger == nil {
-		logger = hclog.New(&hclog.LoggerOptions{
-			Name:  "eventbus",
-			Level: hclog.Info,
-		})
+		logger = log.Named("eventbus")
 	}
 	if bufferSize <= 0 {
 		bufferSize = 100

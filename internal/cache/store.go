@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/delivery-station/ds/pkg/log"
 	"github.com/hashicorp/go-hclog"
 )
 
@@ -21,10 +22,7 @@ type Store struct {
 // NewStore creates a new cache store
 func NewStore(path string, logger hclog.Logger) (*Store, error) {
 	if logger == nil {
-		logger = hclog.New(&hclog.LoggerOptions{
-			Name:  "cache-store",
-			Level: hclog.Info,
-		})
+		logger = log.Named("cache-store")
 	}
 
 	// Ensure directory exists

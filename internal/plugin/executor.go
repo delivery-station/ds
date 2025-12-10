@@ -2,7 +2,6 @@ package plugin
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,7 +12,6 @@ import (
 
 	pkgplugin "github.com/delivery-station/ds/pkg/plugin"
 	"github.com/delivery-station/ds/pkg/types"
-	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-plugin"
 )
 
@@ -74,7 +72,7 @@ func (e *Executor) ExecutePlugin(pluginName, operation string, args []string) (i
 	}
 
 	if exitCode == 0 {
-		finalizers := e.collectFinalizers(pluginName, p, result)
+		finalizers := e.collectFinalizers(pluginName, result)
 		e.invokeFinalizers(finalizers)
 	}
 
@@ -93,11 +91,7 @@ func (e *Executor) runPlugin(pluginName string, info *types.PluginInfo, operatio
 		AllowedProtocols: []plugin.Protocol{
 			plugin.ProtocolGRPC,
 		},
-		Logger: hclog.New(&hclog.LoggerOptions{
-			Name:   "ds-plugin",
-			Output: os.Stderr,
-			Level:  hclog.Error,
-		}),
+		Logger: log.Named("plugin-executor"),
 	})
 	defer client.Kill()
 
@@ -217,7 +211,7 @@ func normalizeFinalizerArgs(args []string) []string {
 	return normalized
 }
 
-func (e *Executor) collectFinalizers(pluginName string, pluginInfo *types.PluginInfo, result *types.ExecutionResult) []types.FinalizerRequest {
+func (e *Executor) collectFinalizers(pluginName string, result *types.ExecutionResult) []types.FinalizerRequest {
 	type key struct {
 		name      string
 		operation string
@@ -267,95 +261,7 @@ func (e *Executor) collectFinalizers(pluginName string, pluginInfo *types.Plugin
 		for _, f := range result.Finalizers {
 			appendFinalizer(f, &finalizers)
 		}
-
-		for _, f := range finalizersFromStdout(result.Stdout) {
-			appendFinalizer(f, &finalizers)
-		}
 	}
 
 	return finalizers
-}
-
-func finalizersFromStdout(stdout string) []types.FinalizerRequest {
-	trimmed := strings.TrimSpace(stdout)
-	if trimmed == "" {
-		return nil
-	}
-
-	var payload struct {
-		Metadata map[string]string `json:"metadata"`
-	}
-
-	if err := json.Unmarshal([]byte(trimmed), &payload); err != nil {
-		return nil
-	}
-
-	return finalizersFromMetadata(payload.Metadata)
-}
-
-func finalizersFromMetadata(metadata map[string]string) []types.FinalizerRequest {
-	if len(metadata) == 0 {
-		return nil
-	}
-
-	name := firstNonEmpty(metadata, "ds.finalizer", "finalizer")
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return nil
-	}
-
-	operation := strings.TrimSpace(firstNonEmpty(metadata, "ds.finalizer.operation", "finalizer.operation"))
-	args := parseFinalizerArgs(firstNonEmpty(metadata, "ds.finalizer.args", "finalizer.args"))
-
-	return []types.FinalizerRequest{{
-		Name:      name,
-		Operation: operation,
-		Args:      args,
-	}}
-}
-
-func firstNonEmpty(metadata map[string]string, keys ...string) string {
-	for _, k := range keys {
-		if v, ok := metadata[k]; ok {
-			if trimmed := strings.TrimSpace(v); trimmed != "" {
-				return trimmed
-			}
-		}
-	}
-	return ""
-}
-
-func parseFinalizerArgs(raw string) []string {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return nil
-	}
-
-	if strings.HasPrefix(trimmed, "[") {
-		var arr []string
-		if err := json.Unmarshal([]byte(trimmed), &arr); err == nil {
-			result := make([]string, 0, len(arr))
-			for _, item := range arr {
-				if val := strings.TrimSpace(item); val != "" {
-					result = append(result, val)
-				}
-			}
-			if len(result) > 0 {
-				return result
-			}
-			return nil
-		}
-	}
-
-	parts := strings.Split(trimmed, ",")
-	result := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if val := strings.TrimSpace(part); val != "" {
-			result = append(result, val)
-		}
-	}
-	if len(result) == 0 {
-		return nil
-	}
-	return result
 }

@@ -311,8 +311,11 @@ func (p *PrimaryPlugin) Execute(ctx context.Context, operation string, args []st
 		return &types.ExecutionResult{ExitCode: 1, Error: "unexpected operation"}, nil
 	}
 	return &types.ExecutionResult{
-		Stdout:   "{\"metadata\":{\"finalizer\":\"finalizer\"}}",
+		Stdout:   "primary complete",
 		ExitCode: 0,
+		Finalizers: []types.FinalizerRequest{{
+			Name: "finalizer",
+		}},
 	}, nil
 }
 

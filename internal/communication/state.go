@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/delivery-station/ds/pkg/log"
 	"github.com/hashicorp/go-hclog"
 )
 
@@ -41,10 +42,7 @@ type StateStore struct {
 // NewStateStore creates a new state store
 func NewStateStore(storeDir string, logger hclog.Logger) (*StateStore, error) {
 	if logger == nil {
-		logger = hclog.New(&hclog.LoggerOptions{
-			Name:  "state-store",
-			Level: hclog.Info,
-		})
+		logger = log.Named("state-store")
 	}
 
 	// Create store directory

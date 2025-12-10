@@ -35,10 +35,7 @@ type SignatureVerifier struct {
 // NewSignatureVerifier creates a new signature verifier
 func NewSignatureVerifier(config *types.SignatureConfig, logger hclog.Logger) (*SignatureVerifier, error) {
 	if logger == nil {
-		logger = hclog.New(&hclog.LoggerOptions{
-			Name:  "signature-verifier",
-			Level: hclog.Info,
-		})
+		logger = log.Named("signature-verifier")
 	}
 
 	if config == nil || config.Mode == SignatureModeDisabled || config.Mode == "" {

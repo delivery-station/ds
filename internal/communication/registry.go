@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/delivery-station/ds/pkg/log"
 	"github.com/hashicorp/go-hclog"
 )
 
@@ -42,10 +43,7 @@ type PluginRegistry struct {
 // NewPluginRegistry creates a new plugin registry
 func NewPluginRegistry(storeDir string, logger hclog.Logger) (*PluginRegistry, error) {
 	if logger == nil {
-		logger = hclog.New(&hclog.LoggerOptions{
-			Name:  "plugin-registry",
-			Level: hclog.Info,
-		})
+		logger = log.Named("plugin-registry")
 	}
 
 	// Create store directory

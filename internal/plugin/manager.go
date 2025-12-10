@@ -15,7 +15,6 @@ import (
 	"github.com/delivery-station/ds/pkg/log"
 	pkgplugin "github.com/delivery-station/ds/pkg/plugin"
 	"github.com/delivery-station/ds/pkg/types"
-	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-plugin"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -273,11 +272,7 @@ func (m *Manager) fetchPluginInfo(pluginPath string) (*types.PluginInfo, error) 
 		AllowedProtocols: []plugin.Protocol{
 			plugin.ProtocolGRPC,
 		},
-		Logger: hclog.New(&hclog.LoggerOptions{
-			Name:   "ds-plugin-manifest",
-			Output: os.Stderr,
-			Level:  hclog.Error,
-		}),
+		Logger: log.Named("plugin-manifest"),
 	})
 	defer client.Kill()
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/delivery-station/ds/pkg/log"
 	"github.com/hashicorp/go-hclog"
 )
 
@@ -31,20 +32,20 @@ func NewManager(config *ManagerConfig) (*Manager, error) {
 
 	logger := config.Logger
 	if logger == nil {
-		logger = hclog.NewNullLogger()
+		logger = log.Named("communication")
 	}
 
 	// Create state store
-	stateStore, err := NewStateStore(filepath.Join(config.StateDir, "state"), logger)
+	stateStore, err := NewStateStore(filepath.Join(config.StateDir, "state"), logger.Named("state"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create state store: %w", err)
 	}
 
 	// Create event bus
-	eventBus := NewEventBus(logger, config.EventBufferSize)
+	eventBus := NewEventBus(logger.Named("events"), config.EventBufferSize)
 
 	// Create plugin registry
-	pluginRegistry, err := NewPluginRegistry(filepath.Join(config.StateDir, "registry"), logger)
+	pluginRegistry, err := NewPluginRegistry(filepath.Join(config.StateDir, "registry"), logger.Named("registry"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create plugin registry: %w", err)
 	}

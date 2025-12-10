@@ -1,47 +1,63 @@
 package log
 
 import (
-	"os"
+	"strings"
+	"sync"
 
 	"github.com/hashicorp/go-hclog"
 )
 
-var logger hclog.Logger
+var (
+	loggerMu sync.RWMutex
+	logger   hclog.Logger = hclog.NewNullLogger()
+)
 
-func init() {
-	logger = hclog.New(&hclog.LoggerOptions{
-		Name:   "ds",
-		Output: os.Stderr,
-		Level:  hclog.Info,
-	})
-}
-
-// SetLogger sets the global logger
+// SetLogger sets the global logger.
 func SetLogger(l hclog.Logger) {
+	loggerMu.Lock()
+	defer loggerMu.Unlock()
+
+	if l == nil {
+		logger = hclog.NewNullLogger()
+		return
+	}
+
 	logger = l
 }
 
-// L returns the global logger
+// L returns the current global logger.
 func L() hclog.Logger {
+	loggerMu.RLock()
+	defer loggerMu.RUnlock()
 	return logger
 }
 
-// Debug logs a debug message
+// Debug logs a debug message.
 func Debug(msg string, args ...interface{}) {
-	logger.Debug(msg, args...)
+	L().Debug(msg, args...)
 }
 
-// Info logs an info message
+// Info logs an info message.
 func Info(msg string, args ...interface{}) {
-	logger.Info(msg, args...)
+	L().Info(msg, args...)
 }
 
-// Warn logs a warning message
+// Warn logs a warning message.
 func Warn(msg string, args ...interface{}) {
-	logger.Warn(msg, args...)
+	L().Warn(msg, args...)
 }
 
-// Error logs an error message
+// Error logs an error message.
 func Error(msg string, args ...interface{}) {
-	logger.Error(msg, args...)
+	L().Error(msg, args...)
+}
+
+// Named returns a child logger that inherits the configured options.
+func Named(name string) hclog.Logger {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return L()
+	}
+
+	return L().Named(trimmed)
 }
