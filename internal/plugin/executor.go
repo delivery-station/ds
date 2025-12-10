@@ -105,38 +105,6 @@ func (e *Executor) HandleError(err error, ctx context.Context, pluginName string
 	return 1
 }
 
-// ExecutePluginWithOutput executes a plugin and captures its output
-func (e *Executor) ExecutePluginWithOutput(pluginName, operation string, args []string) (string, string, int, error) {
-	// Get plugin info
-	p, err := e.manager.GetPlugin(pluginName)
-	if err != nil {
-		return "", "", 1, fmt.Errorf("plugin '%s' not found", pluginName)
-	}
-
-	// Validate plugin
-	if err := e.manager.ValidatePlugin(pluginName); err != nil {
-		return "", "", 1, fmt.Errorf("plugin '%s' is invalid: %w", pluginName, err)
-	}
-
-	log.Debug("Executing plugin with output capture", "plugin", pluginName, "operation", operation, "args", args)
-
-	if strings.TrimSpace(operation) == "" {
-		return "", "", 1, fmt.Errorf("no operation specified")
-	}
-
-	result, exitCode, err := e.runPlugin(pluginName, p, operation, args)
-	if err != nil {
-		return "", "", exitCode, err
-	}
-
-	if exitCode == 0 {
-		finalizers := e.collectFinalizers(pluginName, p, result)
-		e.invokeFinalizers(finalizers)
-	}
-
-	return result.Stdout, result.Stderr, result.ExitCode, nil
-}
-
 func (e *Executor) runPlugin(pluginName string, info *types.PluginInfo, operation string, args []string) (*types.ExecutionResult, int, error) {
 	if strings.TrimSpace(operation) == "" {
 		return nil, 1, fmt.Errorf("no operation specified")
