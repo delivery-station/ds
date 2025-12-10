@@ -141,7 +141,7 @@ func TestExecutePlugin_NotFound(t *testing.T) {
 	mgr := NewManager(tmpDir)
 	executor := NewExecutor(mgr, nil)
 
-	exitCode, err := executor.ExecutePlugin("nonexistent", []string{"test"})
+	exitCode, err := executor.ExecutePlugin("nonexistent", "test", nil)
 
 	if err == nil {
 		t.Error("expected error for non-existent plugin")
@@ -221,7 +221,7 @@ func main() {
 	}
 
 	// Execute plugin
-	exitCode, err := executor.ExecutePlugin("testexec", []string{"run"})
+	exitCode, err := executor.ExecutePlugin("testexec", "run", nil)
 
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -359,7 +359,7 @@ func main() {
 		_ = os.Unsetenv("FINALIZER_OUTPUT")
 	}()
 
-	exitCode, err := executor.ExecutePlugin("primary", []string{"run"})
+	exitCode, err := executor.ExecutePlugin("primary", "run", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -434,7 +434,7 @@ func main() {
 	}
 
 	executor := NewExecutor(mgr, nil)
-	exitCode, err := executor.ExecutePlugin("primary", []string{"run"})
+	exitCode, err := executor.ExecutePlugin("primary", "run", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -505,7 +505,7 @@ func main() {
 		t.Fatalf("failed to discover plugins: %v", err)
 	}
 
-	exitCode, err := executor.ExecutePlugin("failplugin", []string{"run"})
+	exitCode, err := executor.ExecutePlugin("failplugin", "run", nil)
 
 	if err != nil {
 		t.Errorf("unexpected error (should be nil): %v", err)
@@ -580,7 +580,7 @@ func main() {
 		t.Fatalf("failed to discover plugins: %v", err)
 	}
 
-	stdout, stderr, exitCode, err := executor.ExecutePluginWithOutput("outputplugin", []string{"run"})
+	stdout, stderr, exitCode, err := executor.ExecutePluginWithOutput("outputplugin", "run", nil)
 
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -668,7 +668,7 @@ func main() {
 		t.Fatalf("failed to discover plugins: %v", err)
 	}
 
-	exitCode, err := executor.ExecutePlugin("slowplugin", []string{"run"})
+	exitCode, err := executor.ExecutePlugin("slowplugin", "run", nil)
 
 	// We expect a timeout error
 	if err == nil {

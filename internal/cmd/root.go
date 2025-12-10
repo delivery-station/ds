@@ -2,15 +2,19 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/delivery-station/ds/internal/config"
 	"github.com/delivery-station/ds/internal/plugin"
 	"github.com/delivery-station/ds/pkg/log"
+	"github.com/delivery-station/ds/pkg/types"
 	"github.com/hashicorp/go-hclog"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
@@ -54,56 +58,27 @@ func Execute() error {
 	if err != nil {
 		errStr := err.Error()
 
-		if strings.Contains(errStr, "unknown command") {
-			args := os.Args[1:]
-			if len(args) > 0 {
-				// Find the first non-flag argument (the command/plugin name)
-				var pluginName string
-				var pluginArgs []string
+		if strings.Contains(errStr, "unknown command") || strings.Contains(errStr, "unknown flag") {
+			pluginName, operation, pluginArgs, parseErr := parsePluginInvocation(os.Args[1:])
+			if parseErr != nil {
+				return parseErr
+			}
 
-				skipNext := false
-				for i, arg := range args {
-					if skipNext {
-						skipNext = false
-						continue
+			if pluginName != "" {
+				// Try to execute as plugin
+				exitCode, pluginErr := executePlugin(pluginName, operation, pluginArgs)
+				if pluginErr != nil {
+					// If plugin was not found, return the original "unknown command" error
+					// We check for the specific error message returned by the executor
+					if strings.Contains(pluginErr.Error(), fmt.Sprintf("plugin '%s' not found", pluginName)) {
+						return err
 					}
-
-					if strings.HasPrefix(arg, "--") {
-						// Long flag - may have value after = or as next arg
-						if !strings.Contains(arg, "=") {
-							skipNext = true // Skip next arg (the value)
-						}
-						continue
-					}
-
-					if strings.HasPrefix(arg, "-") && arg != "-" {
-						// Short flag - skip next arg as value
-						skipNext = true
-						continue
-					}
-
-					// Found the command name
-					pluginName = arg
-					pluginArgs = args[i+1:]
-					break
+					// Otherwise, return the plugin execution error
+					return pluginErr
 				}
 
-				if pluginName != "" {
-					// Try to execute as plugin
-					exitCode, pluginErr := executePlugin(pluginName, pluginArgs)
-					if pluginErr != nil {
-						// If plugin was not found, return the original "unknown command" error
-						// We check for the specific error message returned by the executor
-						if strings.Contains(pluginErr.Error(), fmt.Sprintf("plugin '%s' not found", pluginName)) {
-							return err
-						}
-						// Otherwise, return the plugin execution error
-						return pluginErr
-					}
-
-					// Exit with plugin's exit code
-					os.Exit(exitCode)
-				}
+				// Exit with plugin's exit code
+				os.Exit(exitCode)
 			}
 		}
 	}
@@ -111,48 +86,217 @@ func Execute() error {
 	return err
 }
 
+// parsePluginInvocation extracts the plugin name and arguments while ensuring
+// that persistent flags are parsed consistently with Cobra/Viper handling.
+func parsePluginInvocation(args []string) (string, string, []string, error) {
+	if len(args) == 0 {
+		return "", "", nil, nil
+	}
+
+	flagSet := pflag.NewFlagSet("ds", pflag.ContinueOnError)
+	flagSet.ParseErrorsAllowlist.UnknownFlags = true
+	// Using the same flag definitions keeps CLI/Viper behaviour consistent.
+	flagSet.AddFlagSet(rootCmd.PersistentFlags())
+	// Route parse diagnostics through the same channel Cobra uses for flag errors.
+	flagSet.SetOutput(os.Stderr)
+
+	if err := flagSet.Parse(args); err != nil {
+		return "", "", nil, err
+	}
+
+	leftovers := flagSet.Args()
+	if len(leftovers) == 0 {
+		return "", "", nil, nil
+	}
+
+	pluginName := leftovers[0]
+	if len(leftovers) < 2 {
+		return pluginName, "", nil, fmt.Errorf("plugin '%s' requires a command", pluginName)
+	}
+
+	normalizedArgs := normalizePluginArgs(leftovers[2:])
+	return pluginName, leftovers[1], normalizedArgs, nil
+}
+
+func normalizePluginArgs(args []string) []string {
+	if len(args) == 0 {
+		return nil
+	}
+
+	normalized := make([]string, 0, len(args))
+	positionalIndex := 0
+
+	for i := 0; i < len(args); i++ {
+		token := strings.TrimSpace(args[i])
+		if token == "" {
+			continue
+		}
+
+		if token == "--" {
+			for j := i + 1; j < len(args); j++ {
+				value := strings.TrimSpace(args[j])
+				if value == "" {
+					continue
+				}
+				normalized = append(normalized, fmt.Sprintf("arg%d=%s", positionalIndex, value))
+				positionalIndex++
+			}
+			break
+		}
+
+		if strings.HasPrefix(token, "--") {
+			key, value, advance := parseLongFlag(token, args, i)
+			if key != "" {
+				normalized = append(normalized, fmt.Sprintf("%s=%s", key, value))
+			}
+			i += advance
+			continue
+		}
+
+		if strings.HasPrefix(token, "-") && token != "-" {
+			keyValues, advance := parseShortFlag(token, args, i)
+			normalized = append(normalized, keyValues...)
+			i += advance
+			continue
+		}
+
+		normalized = append(normalized, fmt.Sprintf("arg%d=%s", positionalIndex, token))
+		positionalIndex++
+	}
+
+	return normalized
+}
+
+func parseLongFlag(token string, args []string, index int) (string, string, int) {
+	trimmed := strings.TrimPrefix(token, "--")
+	trimmed = strings.TrimSpace(trimmed)
+	if trimmed == "" {
+		return "", "", 0
+	}
+
+	if eq := strings.Index(trimmed, "="); eq >= 0 {
+		key := sanitizeArgKey(trimmed[:eq])
+		value := strings.TrimSpace(trimmed[eq+1:])
+		return key, value, 0
+	}
+
+	key := sanitizeArgKey(trimmed)
+	if key == "" {
+		return "", "", 0
+	}
+
+	if next := index + 1; next < len(args) {
+		candidate := strings.TrimSpace(args[next])
+		if candidate != "" && !looksLikeFlag(candidate) {
+			return key, candidate, 1
+		}
+		if looksLikeNegativeNumber(candidate) {
+			return key, candidate, 1
+		}
+	}
+
+	return key, "true", 0
+}
+
+func parseShortFlag(token string, args []string, index int) ([]string, int) {
+	trimmed := strings.TrimPrefix(token, "-")
+	trimmed = strings.TrimSpace(trimmed)
+	if trimmed == "" {
+		return nil, 0
+	}
+
+	// Handle inline assignment (-o=value)
+	if strings.Contains(trimmed, "=") {
+		parts := strings.SplitN(trimmed, "=", 2)
+		key := sanitizeArgKey(parts[0])
+		value := strings.TrimSpace(parts[1])
+		if key == "" {
+			return nil, 0
+		}
+		return []string{fmt.Sprintf("%s=%s", key, value)}, 0
+	}
+
+	if len(trimmed) > 1 {
+		// Treat clustered short flags (-abc) as booleans
+		values := make([]string, 0, len(trimmed))
+		for _, r := range trimmed {
+			key := sanitizeArgKey(string(r))
+			if key == "" {
+				continue
+			}
+			values = append(values, fmt.Sprintf("%s=true", key))
+		}
+		return values, 0
+	}
+
+	key := sanitizeArgKey(trimmed)
+	if key == "" {
+		return nil, 0
+	}
+
+	if next := index + 1; next < len(args) {
+		candidate := strings.TrimSpace(args[next])
+		if candidate != "" && !looksLikeFlag(candidate) {
+			return []string{fmt.Sprintf("%s=%s", key, candidate)}, 1
+		}
+		if looksLikeNegativeNumber(candidate) {
+			return []string{fmt.Sprintf("%s=%s", key, candidate)}, 1
+		}
+	}
+
+	return []string{fmt.Sprintf("%s=true", key)}, 0
+}
+
+func sanitizeArgKey(key string) string {
+	key = strings.TrimSpace(key)
+	key = strings.TrimPrefix(key, "-")
+	key = strings.TrimPrefix(key, "-")
+	key = strings.TrimSpace(key)
+	key = strings.ToLower(key)
+	return key
+}
+
+func looksLikeFlag(token string) bool {
+	if token == "" || token == "-" {
+		return false
+	}
+	if !strings.HasPrefix(token, "-") {
+		return false
+	}
+	if token == "--" {
+		return true
+	}
+	if looksLikeNegativeNumber(token) {
+		return false
+	}
+	return true
+}
+
+func looksLikeNegativeNumber(token string) bool {
+	if token == "" {
+		return false
+	}
+	if token == "-" {
+		return false
+	}
+	if !strings.HasPrefix(token, "-") {
+		return false
+	}
+	if _, err := strconv.ParseFloat(token, 64); err == nil {
+		return true
+	}
+	return false
+}
+
 // executePlugin attempts to execute a plugin
-func executePlugin(pluginName string, args []string) (int, error) {
-	// Manually check for --log-level flag in os.Args
-	for i, arg := range os.Args {
-		if arg == "--log-level" && i+1 < len(os.Args) {
-			logLevel = os.Args[i+1]
-		}
-		if strings.HasPrefix(arg, "--log-level=") {
-			logLevel = strings.TrimPrefix(arg, "--log-level=")
-		}
-	}
-
-	// Manually check for --config flag in os.Args
-	for i, arg := range os.Args {
-		if arg == "--config" && i+1 < len(os.Args) {
-			cfgFile = os.Args[i+1]
-			break
-		}
-		if strings.HasPrefix(arg, "--config=") {
-			cfgFile = strings.TrimPrefix(arg, "--config=")
-			break
-		}
-	}
-
+func executePlugin(pluginName, operation string, args []string) (int, error) {
 	// Initialize config manually (since PersistentPreRunE won't run for unknown commands)
 	if err := initConfig(); err != nil {
 		// Continue anyway with defaults - config errors are non-fatal for plugin execution
 		log.Debug("Failed to initialize config, using defaults", "error", err)
 	}
 
-	// Manually check for --plugin-dir flag in os.Args
 	pluginDir := viper.GetString("plugins.dir")
-	for i, arg := range os.Args {
-		if arg == "--plugin-dir" && i+1 < len(os.Args) {
-			pluginDir = os.Args[i+1]
-			break
-		}
-		if strings.HasPrefix(arg, "--plugin-dir=") {
-			pluginDir = strings.TrimPrefix(arg, "--plugin-dir=")
-			break
-		}
-	}
 
 	// Load configuration
 	loader := config.NewLoader()
@@ -176,7 +320,7 @@ func executePlugin(pluginName string, args []string) (int, error) {
 	executor := plugin.NewExecutor(mgr, cfg)
 
 	// Execute plugin
-	exitCode, err := executor.ExecutePlugin(pluginName, args)
+	exitCode, err := executor.ExecutePlugin(pluginName, operation, args)
 	return exitCode, err
 }
 
@@ -190,7 +334,7 @@ func SetVersionInfo(v, c, d string) {
 func init() {
 	// Global flags
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default: ~/.config/ds/config.yaml)")
-	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "log level (debug, info, warn, error)")
+	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "", "log level override (debug, info, warn, error)")
 	rootCmd.PersistentFlags().StringVar(&pluginDir, "plugin-dir", "", "plugin directory (default: ~/.config/ds/plugins)")
 	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "disable colored output")
 
@@ -207,24 +351,43 @@ func init() {
 
 	// Bind flags to viper
 	_ = viper.BindPFlag("config", rootCmd.PersistentFlags().Lookup("config"))
-	_ = viper.BindPFlag("logging.level", rootCmd.PersistentFlags().Lookup("log-level"))
+	_ = viper.BindPFlag("logging.level_override", rootCmd.PersistentFlags().Lookup("log-level"))
 	_ = viper.BindPFlag("plugins.dir", rootCmd.PersistentFlags().Lookup("plugin-dir"))
 	_ = viper.BindPFlag("no_color", rootCmd.PersistentFlags().Lookup("no-color"))
 }
 
 // initConfig reads in config file and ENV variables if set.
 func initConfig() error {
-	// Setup logging
-	level := hclog.LevelFromString(logLevel)
-	if level == hclog.NoLevel {
-		level = hclog.Info
+	config.SetExplicitConfigFile(cfgFile)
+
+	viper.SetEnvPrefix("DS")
+	viper.AutomaticEnv()
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+
+	loader := config.NewLoader()
+	cfg, err := loader.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load configuration: %w", err)
+	}
+
+	applyLogLevelOverride(cfg)
+
+	lvl, err := resolveLogLevel(cfg)
+	if err != nil {
+		return err
+	}
+
+	outputWriter, err := resolveLogOutput(cfg.Logging.Output)
+	if err != nil {
+		return fmt.Errorf("failed to configure logging output: %w", err)
 	}
 
 	opts := &hclog.LoggerOptions{
-		Name:   "ds",
-		Output: os.Stderr,
-		Level:  level,
-		Color:  hclog.AutoColor,
+		Name:       "ds",
+		Output:     outputWriter,
+		Level:      lvl,
+		Color:      hclog.AutoColor,
+		JSONFormat: strings.EqualFold(cfg.Logging.Format, "json"),
 	}
 
 	if noColor {
@@ -233,67 +396,73 @@ func initConfig() error {
 
 	log.SetLogger(hclog.New(opts))
 
-	// Set config file
 	if cfgFile != "" {
-		viper.SetConfigFile(cfgFile)
-	} else {
-		// Find home directory
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return fmt.Errorf("failed to get home directory: %w", err)
-		}
-
-		// Search for config in standard locations
-		viper.AddConfigPath(filepath.Join(home, ".config", "ds"))
-		viper.AddConfigPath(".")
-		viper.SetConfigName("config")
-		viper.SetConfigType("yaml")
+		log.Debug("Configured explicit config override", "file", cfgFile)
 	}
-
-	// Environment variables
-	viper.SetEnvPrefix("DS")
-	viper.AutomaticEnv()
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-
-	// Read config file if it exists
-	if err := viper.ReadInConfig(); err != nil {
-		// Only return error if config file was explicitly specified
-		if cfgFile != "" {
-			return fmt.Errorf("failed to read config file: %w", err)
-		}
-		// Otherwise, just log debug message
-		log.Debug("No config file found", "error", err)
-	} else {
-		log.Debug("Using config file", "file", viper.ConfigFileUsed())
-	}
-
-	// Set defaults
-	setDefaults()
 
 	return nil
 }
 
-func setDefaults() {
-	home, _ := os.UserHomeDir()
+func applyLogLevelOverride(cfg *types.Config) {
+	if cfg == nil {
+		return
+	}
 
-	// Registry defaults
-	viper.SetDefault("registry.default", "ghcr.io/delivery-station")
-	viper.SetDefault("registry.insecure_registries", []string{})
+	override := strings.TrimSpace(logLevel)
+	if override == "" {
+		override = strings.TrimSpace(viper.GetString("logging.level_override"))
+	}
 
-	// Cache defaults
-	viper.SetDefault("cache.dir", filepath.Join(home, ".cache", "ds"))
-	viper.SetDefault("cache.max_size", "10GB")
-	viper.SetDefault("cache.ttl", "7d")
+	if override != "" {
+		override = strings.ToLower(override)
+		cfg.Logging.Level = override
+	}
 
-	// Logging defaults
-	viper.SetDefault("logging.level", "info")
-	viper.SetDefault("logging.format", "text")
-	viper.SetDefault("logging.output", "stdout")
+	if strings.TrimSpace(cfg.Logging.Level) == "" {
+		cfg.Logging.Level = "info"
+	}
 
-	// Plugin defaults
-	viper.SetDefault("plugins.dir", filepath.Join(home, ".config", "ds", "plugins"))
-	viper.SetDefault("plugins.auto_install", true)
+	viper.Set("logging.level", cfg.Logging.Level)
+}
 
-	// Auth defaults
-	viper.SetDefault("auth.docker_config", filepath.Join(home, ".docker", "config.json"))
+func resolveLogLevel(cfg *types.Config) (hclog.Level, error) {
+	if cfg == nil {
+		return hclog.NoLevel, fmt.Errorf("missing configuration")
+	}
+
+	level := strings.TrimSpace(cfg.Logging.Level)
+	if level == "" {
+		level = "info"
+	}
+
+	lvl := hclog.LevelFromString(strings.ToLower(level))
+	if lvl == hclog.NoLevel {
+		return hclog.NoLevel, fmt.Errorf("invalid log level: %s", level)
+	}
+
+	return lvl, nil
+}
+
+func resolveLogOutput(output string) (io.Writer, error) {
+	trimmed := strings.TrimSpace(output)
+	if trimmed == "" || strings.EqualFold(trimmed, "stdout") {
+		return os.Stdout, nil
+	}
+	if strings.EqualFold(trimmed, "stderr") {
+		return os.Stderr, nil
+	}
+
+	dir := filepath.Dir(trimmed)
+	if dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, err
+		}
+	}
+
+	file, err := os.OpenFile(trimmed, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return nil, err
+	}
+
+	return file, nil
 }

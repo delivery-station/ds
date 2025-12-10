@@ -1,6 +1,8 @@
 package plugin
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,8 +13,12 @@ import (
 	"time"
 
 	"github.com/delivery-station/ds/pkg/log"
+	pkgplugin "github.com/delivery-station/ds/pkg/plugin"
 	"github.com/delivery-station/ds/pkg/types"
-	"gopkg.in/yaml.v3"
+	"github.com/hashicorp/go-hclog"
+	"github.com/hashicorp/go-plugin"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // Manager handles plugin discovery and management
@@ -24,6 +30,12 @@ type Manager struct {
 	verifier  *SignatureVerifier
 	mu        sync.RWMutex
 }
+
+var (
+	errManifestRPCUnsupported = errors.New("plugin manifest RPC not supported")
+)
+
+const manifestRPCDeadline = 5 * time.Second
 
 // NewManager creates a new plugin manager
 func NewManager(pluginDir string) *Manager {
@@ -254,49 +266,95 @@ func (m *Manager) getPluginVersion(pluginPath string) (string, error) {
 }
 
 // loadPluginManifest loads the plugin manifest file
+
 func (m *Manager) loadPluginManifest(pluginPath string) (*types.PluginManifest, error) {
-	// Look for plugin manifest in the same directory as the plugin binary
-	dir := filepath.Dir(pluginPath)
-	base := filepath.Base(pluginPath)
-
-	// Remove extension if present
-	base = strings.TrimSuffix(base, filepath.Ext(base))
-	trimmed := strings.TrimPrefix(base, "ds-")
-
-	// Try different manifest locations
-	manifestPaths := []string{
-		filepath.Join(dir, base+".json"),
-		filepath.Join(dir, "plugin.json"),
+	manifest, err := m.fetchPluginManifest(pluginPath)
+	if err == nil {
+		return manifest, nil
 	}
 
-	if trimmed != base {
-		manifestPaths = append(manifestPaths, filepath.Join(dir, trimmed+".json"))
+	if errors.Is(err, errManifestRPCUnsupported) {
+		log.Debug("Plugin does not expose manifest RPC", "path", pluginPath)
+	} else {
+		log.Debug("Failed to fetch manifest via RPC", "path", pluginPath, "error", err)
+	}
+	return nil, err
+}
+
+func (m *Manager) fetchPluginManifest(pluginPath string) (*types.PluginManifest, error) {
+	client := plugin.NewClient(&plugin.ClientConfig{
+		HandshakeConfig: pkgplugin.Handshake,
+		Plugins:         pkgplugin.PluginMap,
+		Cmd:             exec.Command(pluginPath),
+		AllowedProtocols: []plugin.Protocol{
+			plugin.ProtocolGRPC,
+		},
+		Logger: hclog.New(&hclog.LoggerOptions{
+			Name:   "ds-plugin-manifest",
+			Output: os.Stderr,
+			Level:  hclog.Error,
+		}),
+	})
+	defer client.Kill()
+
+	rpcClient, err := client.Client()
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to plugin: %w", err)
 	}
 
-	var manifestData []byte
-	var manifestErr error
+	raw, err := rpcClient.Dispense("ds-plugin")
+	if err != nil {
+		return nil, fmt.Errorf("failed to dispense plugin: %w", err)
+	}
 
-	for _, manifestPath := range manifestPaths {
-		data, err := os.ReadFile(manifestPath)
-		if err == nil {
-			manifestData = data
-			manifestErr = nil
-			log.Debug("Found manifest", "path", manifestPath)
-			break
+	manifestClient, ok := raw.(interface {
+		GetManifest(context.Context) (*types.PluginManifest, error)
+	})
+	if !ok {
+		return nil, errManifestRPCUnsupported
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), manifestRPCDeadline)
+	defer cancel()
+
+	manifest, err := manifestClient.GetManifest(ctx)
+	if err != nil {
+		if status.Code(err) == codes.Unimplemented {
+			return nil, errManifestRPCUnsupported
 		}
-		manifestErr = err
+		return nil, fmt.Errorf("manifest RPC call failed: %w", err)
 	}
 
-	if manifestErr != nil {
-		return nil, fmt.Errorf("manifest not found: %w", manifestErr)
+	if manifest == nil {
+		return nil, fmt.Errorf("plugin returned empty manifest")
 	}
 
-	var manifest types.PluginManifest
-	if err := yaml.Unmarshal(manifestData, &manifest); err != nil {
-		return nil, fmt.Errorf("failed to parse manifest: %w", err)
+	clone := &types.PluginManifest{
+		Name:        manifest.Name,
+		Version:     manifest.Version,
+		Description: manifest.Description,
 	}
 
-	return &manifest, nil
+	if len(manifest.Commands) > 0 {
+		clone.Commands = make([]types.PluginCommand, len(manifest.Commands))
+		copy(clone.Commands, manifest.Commands)
+	}
+
+	if len(manifest.Platform.OS) > 0 {
+		clone.Platform.OS = append([]string{}, manifest.Platform.OS...)
+	}
+	if len(manifest.Platform.Arch) > 0 {
+		clone.Platform.Arch = append([]string{}, manifest.Platform.Arch...)
+	}
+
+	if len(manifest.Annotations) > 0 {
+		clone.Annotations = make(map[string]string, len(manifest.Annotations))
+		for k, v := range manifest.Annotations {
+			clone.Annotations[k] = v
+		}
+	}
+
+	return clone, nil
 }
 
 // isCompatiblePlatform checks if the plugin is compatible with current platform

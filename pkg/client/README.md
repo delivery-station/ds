@@ -70,7 +70,7 @@ err := client.InstallPlugin(ctx, "plugin-name", "1.0.0")
 plugins, err := client.ListPlugins()
 
 // Execute a plugin
-exitCode, err := client.ExecutePlugin("plugin-name", []string{"arg1", "arg2"})
+exitCode, err := client.ExecutePlugin("plugin-name", "command", []string{"arg1", "arg2"})
 ```
 
 ### State Management

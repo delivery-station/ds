@@ -9,6 +9,8 @@ import (
 	"github.com/delivery-station/ds/pkg/types"
 	"github.com/hashicorp/go-plugin"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // Handshake is a common handshake config for all plugins
@@ -62,6 +64,48 @@ func (m *GRPCClient) GetMetadata(ctx context.Context) (*types.PluginMetadata, er
 		},
 		Config: resp.Config,
 	}, nil
+}
+
+func (m *GRPCClient) GetManifest(ctx context.Context) (*types.PluginManifest, error) {
+	resp, err := m.client.GetManifest(ctx, &GetManifestRequest{})
+	if err != nil {
+		return nil, err
+	}
+
+	manifest := &types.PluginManifest{
+		Name:        resp.GetName(),
+		Version:     resp.GetVersion(),
+		Description: resp.GetDescription(),
+	}
+
+	if resp.GetPlatform() != nil {
+		manifest.Platform = types.PluginPlatform{
+			OS:   append([]string{}, resp.GetPlatform().GetOs()...),
+			Arch: append([]string{}, resp.GetPlatform().GetArch()...),
+		}
+	}
+
+	if len(resp.GetAnnotations()) > 0 {
+		manifest.Annotations = make(map[string]string, len(resp.GetAnnotations()))
+		for k, v := range resp.GetAnnotations() {
+			manifest.Annotations[k] = v
+		}
+	}
+
+	if len(resp.GetCommands()) > 0 {
+		manifest.Commands = make([]types.PluginCommand, 0, len(resp.GetCommands()))
+		for _, cmd := range resp.GetCommands() {
+			if cmd == nil {
+				continue
+			}
+			manifest.Commands = append(manifest.Commands, types.PluginCommand{
+				Name:        cmd.GetName(),
+				Description: cmd.GetDescription(),
+			})
+		}
+	}
+
+	return manifest, nil
 }
 
 func (m *GRPCClient) Execute(ctx context.Context, operation string, args []string, env map[string]string) (*types.ExecutionResult, error) {
@@ -184,6 +228,55 @@ func (m *GRPCServer) GetMetadata(ctx context.Context, req *GetMetadataRequest) (
 		},
 		Config: meta.Config,
 	}, nil
+}
+
+func (m *GRPCServer) GetManifest(ctx context.Context, req *GetManifestRequest) (*GetManifestResponse, error) {
+	provider, ok := m.Impl.(types.PluginManifestProvider)
+	if !ok {
+		return nil, status.Errorf(codes.Unimplemented, "manifest RPC not implemented")
+	}
+
+	manifest, err := provider.GetManifest(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if manifest == nil {
+		return &GetManifestResponse{}, nil
+	}
+
+	resp := &GetManifestResponse{
+		Name:        manifest.Name,
+		Version:     manifest.Version,
+		Description: manifest.Description,
+	}
+
+	if len(manifest.Commands) > 0 {
+		resp.Commands = make([]*PluginCommand, 0, len(manifest.Commands))
+		for _, cmd := range manifest.Commands {
+			resp.Commands = append(resp.Commands, &PluginCommand{
+				Name:        cmd.Name,
+				Description: cmd.Description,
+			})
+		}
+
+	}
+
+	if manifest.Annotations != nil {
+		resp.Annotations = make(map[string]string, len(manifest.Annotations))
+		for k, v := range manifest.Annotations {
+			resp.Annotations[k] = v
+		}
+	}
+
+	if len(manifest.Platform.OS) > 0 || len(manifest.Platform.Arch) > 0 {
+		resp.Platform = &Platform{
+			Os:   append([]string{}, manifest.Platform.OS...),
+			Arch: append([]string{}, manifest.Platform.Arch...),
+		}
+	}
+
+	return resp, nil
 }
 
 func (m *GRPCServer) Execute(ctx context.Context, req *ExecuteRequest) (*ExecuteResponse, error) {

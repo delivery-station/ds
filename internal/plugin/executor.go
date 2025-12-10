@@ -39,7 +39,7 @@ func (e *Executor) SetTimeout(timeout time.Duration) {
 }
 
 // ExecutePlugin executes a plugin with the given arguments
-func (e *Executor) ExecutePlugin(pluginName string, args []string) (int, error) {
+func (e *Executor) ExecutePlugin(pluginName, operation string, args []string) (int, error) {
 	// Get plugin info
 	p, err := e.manager.GetPlugin(pluginName)
 	if err != nil {
@@ -51,15 +51,15 @@ func (e *Executor) ExecutePlugin(pluginName string, args []string) (int, error) 
 		return 1, fmt.Errorf("plugin '%s' is invalid: %w", pluginName, err)
 	}
 
-	log.Debug("Executing plugin", "name", pluginName, "args", args)
+	log.Debug("Executing plugin", "name", pluginName, "operation", operation, "args", args)
 
-	if len(args) == 0 {
+	if strings.TrimSpace(operation) == "" {
 		return 1, fmt.Errorf("no operation specified")
 	}
 
 	envMap := envSliceToMap(e.PrepareEnvironment(pluginName))
 
-	result, exitCode, err := e.runPlugin(pluginName, p, args, envMap)
+	result, exitCode, err := e.runPlugin(pluginName, p, operation, args, envMap)
 	if err != nil {
 		return exitCode, err
 	}
@@ -118,7 +118,7 @@ func (e *Executor) HandleError(err error, ctx context.Context, pluginName string
 }
 
 // ExecutePluginWithOutput executes a plugin and captures its output
-func (e *Executor) ExecutePluginWithOutput(pluginName string, args []string) (string, string, int, error) {
+func (e *Executor) ExecutePluginWithOutput(pluginName, operation string, args []string) (string, string, int, error) {
 	// Get plugin info
 	p, err := e.manager.GetPlugin(pluginName)
 	if err != nil {
@@ -130,15 +130,15 @@ func (e *Executor) ExecutePluginWithOutput(pluginName string, args []string) (st
 		return "", "", 1, fmt.Errorf("plugin '%s' is invalid: %w", pluginName, err)
 	}
 
-	log.Debug("Executing plugin with output capture", "plugin", pluginName, "args", args)
+	log.Debug("Executing plugin with output capture", "plugin", pluginName, "operation", operation, "args", args)
 
-	if len(args) == 0 {
+	if strings.TrimSpace(operation) == "" {
 		return "", "", 1, fmt.Errorf("no operation specified")
 	}
 
 	envMap := envSliceToMap(e.PrepareEnvironment(pluginName))
 
-	result, exitCode, err := e.runPlugin(pluginName, p, args, envMap)
+	result, exitCode, err := e.runPlugin(pluginName, p, operation, args, envMap)
 	if err != nil {
 		return "", "", exitCode, err
 	}
@@ -151,8 +151,8 @@ func (e *Executor) ExecutePluginWithOutput(pluginName string, args []string) (st
 	return result.Stdout, result.Stderr, result.ExitCode, nil
 }
 
-func (e *Executor) runPlugin(pluginName string, info *types.PluginInfo, args []string, envMap map[string]string) (*types.ExecutionResult, int, error) {
-	if len(args) == 0 {
+func (e *Executor) runPlugin(pluginName string, info *types.PluginInfo, operation string, args []string, envMap map[string]string) (*types.ExecutionResult, int, error) {
+	if strings.TrimSpace(operation) == "" {
 		return nil, 1, fmt.Errorf("no operation specified")
 	}
 
@@ -186,16 +186,13 @@ func (e *Executor) runPlugin(pluginName string, info *types.PluginInfo, args []s
 		return nil, 1, fmt.Errorf("plugin does not implement PluginProtocol")
 	}
 
-	op := args[0]
-	opArgs := args[1:]
-
 	ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
 	if e.config != nil {
 		ctx = types.WithHostConfigPayload(ctx, e.config)
 	}
 	defer cancel()
 
-	result, err := dsPlugin.Execute(ctx, op, opArgs, envMap)
+	result, err := dsPlugin.Execute(ctx, operation, args, envMap)
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			return nil, 124, fmt.Errorf("plugin execution timed out")
@@ -230,13 +227,8 @@ func (e *Executor) executeFinalizer(req types.FinalizerRequest) (int, error) {
 
 	envMap := envSliceToMap(e.PrepareEnvironment(finalizerName))
 
-	args := make([]string, 0, 1+len(req.Args))
-	args = append(args, operation)
-	if len(req.Args) > 0 {
-		args = append(args, req.Args...)
-	}
-
-	result, exitCode, err := e.runPlugin(finalizerName, finalizerInfo, args, envMap)
+	normalizedArgs := normalizeFinalizerArgs(req.Args)
+	result, exitCode, err := e.runPlugin(finalizerName, finalizerInfo, operation, normalizedArgs, envMap)
 	if err != nil {
 		return exitCode, fmt.Errorf("finalizer plugin '%s' failed: %w", finalizerName, err)
 	}
@@ -280,6 +272,36 @@ func (e *Executor) invokeFinalizers(finalizers []types.FinalizerRequest) {
 			log.Warn("Finalizer execution failed", "plugin", finalizer.Name, "operation", finalizer.Operation, "exit_code", exitCode, "error", err)
 		}
 	}
+}
+
+func normalizeFinalizerArgs(args []string) []string {
+	if len(args) == 0 {
+		return nil
+	}
+
+	normalized := make([]string, 0, len(args))
+	positional := 0
+
+	for _, raw := range args {
+		token := strings.TrimSpace(raw)
+		if token == "" {
+			continue
+		}
+
+		if strings.Contains(token, "=") && !strings.HasPrefix(token, "=") {
+			normalized = append(normalized, token)
+			continue
+		}
+
+		normalized = append(normalized, fmt.Sprintf("arg%d=%s", positional, token))
+		positional++
+	}
+
+	if len(normalized) == 0 {
+		return nil
+	}
+
+	return normalized
 }
 
 func (e *Executor) collectFinalizers(pluginName string, pluginInfo *types.PluginInfo, result *types.ExecutionResult) []types.FinalizerRequest {

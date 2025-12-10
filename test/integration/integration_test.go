@@ -170,7 +170,7 @@ func TestPluginIntegration(t *testing.T) {
 	t.Run("plugin execution", func(t *testing.T) {
 		// Note: This would require an actual plugin to be installed
 		// For now, we just test that the API is accessible
-		_, err := dsClient.ExecutePlugin("non-existent-plugin", []string{})
+		_, err := dsClient.ExecutePlugin("non-existent-plugin", "run", nil)
 		// We expect this to fail since plugin doesn't exist
 		assert.Error(t, err)
 	})

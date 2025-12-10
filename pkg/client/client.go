@@ -170,9 +170,9 @@ func (c *Client) ListPlugins() ([]*types.PluginInfo, error) {
 }
 
 // ExecutePlugin runs a plugin command
-func (c *Client) ExecutePlugin(name string, args []string) (int, error) {
+func (c *Client) ExecutePlugin(name, operation string, args []string) (int, error) {
 	executor := plugin.NewExecutor(c.pluginMgr, c.config)
-	return executor.ExecutePlugin(name, args)
+	return executor.ExecutePlugin(name, operation, args)
 }
 
 // Subscribe subscribes to events from the event bus

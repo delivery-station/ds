@@ -196,7 +196,6 @@ func TestValidate(t *testing.T) {
 }
 
 func TestConfigPrecedence(t *testing.T) {
-	// Create temporary config file
 	tmpDir := t.TempDir()
 	configFile := filepath.Join(tmpDir, "config.yaml")
 
@@ -213,31 +212,144 @@ cache:
 		t.Fatalf("failed to create test config file: %v", err)
 	}
 
-	// Create a new viper instance for testing
-	v := viper.New()
-	v.SetConfigFile(configFile)
-	loader := &Loader{viper: v}
+	homeDir := filepath.Join(tmpDir, "home")
+	if err := os.MkdirAll(homeDir, 0755); err != nil {
+		t.Fatalf("failed to create fake home: %v", err)
+	}
+	t.Setenv("HOME", homeDir)
 
-	// Load defaults
-	loader.LoadDefaults()
+	SetExplicitConfigFile(configFile)
+	defer SetExplicitConfigFile("")
 
-	// Load from file
-	if err := loader.LoadFromFile(); err != nil {
-		t.Fatalf("failed to load from file: %v", err)
+	loader := &Loader{viper: viper.New()}
+	cfg, err := loader.Load()
+	if err != nil {
+		t.Fatalf("failed to load config: %v", err)
 	}
 
-	// Check that file values override defaults
-	if v.GetString("registry.default") != "file-registry.io" {
-		t.Errorf("expected registry.default from file, got %s", v.GetString("registry.default"))
+	if cfg.Registry.Default != "file-registry.io" {
+		t.Errorf("expected registry.default from file, got %s", cfg.Registry.Default)
 	}
 
-	if v.GetString("logging.level") != "debug" {
-		t.Errorf("expected logging.level from file, got %s", v.GetString("logging.level"))
+	if cfg.Logging.Level != "debug" {
+		t.Errorf("expected logging.level from file, got %s", cfg.Logging.Level)
 	}
 
-	// Check that defaults are still used for non-overridden values
-	if v.GetString("logging.format") != "text" {
-		t.Errorf("expected logging.format from defaults, got %s", v.GetString("logging.format"))
+	if cfg.Logging.Format != "text" {
+		t.Errorf("expected logging.format from defaults, got %s", cfg.Logging.Format)
+	}
+}
+
+func TestLoadFromFileMergesBaseAndExplicit(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	baseConfigDir := filepath.Join(homeDir, ".config", "ds")
+	if err := os.MkdirAll(baseConfigDir, 0755); err != nil {
+		t.Fatalf("failed to create base config dir: %v", err)
+	}
+
+	baseConfigPath := filepath.Join(baseConfigDir, "config.yaml")
+	baseConfig := `
+logging:
+  level: "debug"
+cache:
+  dir: "/tmp/base-cache"
+`
+	if err := os.WriteFile(baseConfigPath, []byte(baseConfig), 0644); err != nil {
+		t.Fatalf("failed to write base config: %v", err)
+	}
+
+	overridePath := filepath.Join(tmpDir, "override.yaml")
+	overrideConfig := `
+cache:
+  max_size: "2GB"
+`
+	if err := os.WriteFile(overridePath, []byte(overrideConfig), 0644); err != nil {
+		t.Fatalf("failed to write override config: %v", err)
+	}
+
+	t.Setenv("HOME", homeDir)
+	SetExplicitConfigFile(overridePath)
+	defer SetExplicitConfigFile("")
+
+	loader := &Loader{viper: viper.New()}
+	cfg, err := loader.Load()
+	if err != nil {
+		t.Fatalf("failed to load merged config: %v", err)
+	}
+
+	if cfg.Logging.Level != "debug" {
+		t.Errorf("expected logging.level from base config, got %s", cfg.Logging.Level)
+	}
+
+	if cfg.Cache.Dir != "/tmp/base-cache" {
+		t.Errorf("expected cache.dir from base config, got %s", cfg.Cache.Dir)
+	}
+
+	const twoGiB = int64(2 * 1024 * 1024 * 1024)
+	if cfg.Cache.MaxSize != twoGiB {
+		t.Errorf("expected cache.max_size override of %d, got %d", twoGiB, cfg.Cache.MaxSize)
+	}
+}
+
+func TestParseSizeStringSupportsBytes(t *testing.T) {
+	value, err := parseSize("10737418240")
+	if err != nil {
+		t.Fatalf("parseSize returned error: %v", err)
+	}
+
+	const expected = int64(10737418240)
+	if value != expected {
+		t.Fatalf("expected %d bytes, got %d", expected, value)
+	}
+}
+
+func TestParseSizeValueNumericTypes(t *testing.T) {
+	size, err := parseSizeValue(10737418240)
+	if err != nil {
+		t.Fatalf("parseSizeValue returned error: %v", err)
+	}
+
+	if size != 10737418240 {
+		t.Fatalf("expected 10737418240, got %d", size)
+	}
+
+	size, err = parseSizeValue(uint64(10737418240))
+	if err != nil {
+		t.Fatalf("parseSizeValue returned error: %v", err)
+	}
+
+	if size != 10737418240 {
+		t.Fatalf("expected 10737418240 for uint value, got %d", size)
+	}
+}
+
+func TestLoadHandlesNumericCacheSize(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	content := `
+cache:
+  max_size: 10737418240
+`
+
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	t.Setenv("HOME", filepath.Join(tmpDir, "home"))
+	SetExplicitConfigFile(configPath)
+	defer SetExplicitConfigFile("")
+
+	loader := &Loader{viper: viper.New()}
+	cfg, err := loader.Load()
+	if err != nil {
+		t.Fatalf("failed to load config: %v", err)
+	}
+
+	const expected = int64(10737418240)
+	if cfg.Cache.MaxSize != expected {
+		t.Fatalf("expected cache.max_size %d, got %d", expected, cfg.Cache.MaxSize)
 	}
 }
 

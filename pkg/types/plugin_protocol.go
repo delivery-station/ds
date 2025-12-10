@@ -21,6 +21,11 @@ type PluginProtocol interface {
 	GetSchema(ctx context.Context) (*PluginSchema, error)
 }
 
+// PluginManifestProvider can be implemented by plugins that expose a manifest over RPC.
+type PluginManifestProvider interface {
+	GetManifest(ctx context.Context) (*PluginManifest, error)
+}
+
 // PluginMetadata contains plugin information
 type PluginMetadata struct {
 	Name        string            `json:"name"`

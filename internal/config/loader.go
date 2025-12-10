@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -33,6 +34,8 @@ func NewLoader() *Loader {
 // Load loads configuration from all sources with proper precedence
 // Precedence: CLI Flags > Environment Variables > Config File > Defaults
 func (l *Loader) Load() (*types.Config, error) {
+	l.ensureEnvBindings()
+
 	// Set defaults first
 	l.LoadDefaults()
 
@@ -48,12 +51,11 @@ func (l *Loader) Load() (*types.Config, error) {
 	var config types.Config
 
 	// Pre-parse cache.max_size and cache.ttl before unmarshal
-	if maxSizeStr := l.viper.GetString("cache.max_size"); maxSizeStr != "" {
-		size, err := parseSize(maxSizeStr)
+	if rawMaxSize := l.viper.Get("cache.max_size"); rawMaxSize != nil {
+		size, err := parseSizeValue(rawMaxSize)
 		if err != nil {
 			return nil, fmt.Errorf("invalid cache.max_size: %w", err)
 		}
-		// Set as int64 in viper for unmarshal
 		l.viper.Set("cache.max_size", size)
 	}
 
@@ -74,6 +76,22 @@ func (l *Loader) Load() (*types.Config, error) {
 	// Expand variables
 	if err := l.expandVariables(&config); err != nil {
 		return nil, fmt.Errorf("failed to expand variables: %w", err)
+	}
+
+	// Normalize logging configuration after all sources merge
+	config.Logging.Level = strings.ToLower(strings.TrimSpace(config.Logging.Level))
+	if config.Logging.Level == "" {
+		config.Logging.Level = "info"
+	}
+
+	config.Logging.Format = strings.ToLower(strings.TrimSpace(config.Logging.Format))
+	if config.Logging.Format == "" {
+		config.Logging.Format = "text"
+	}
+
+	config.Logging.Output = strings.TrimSpace(config.Logging.Output)
+	if config.Logging.Output == "" {
+		config.Logging.Output = "stdout"
 	}
 
 	// Merge Docker credentials (best-effort)
@@ -130,20 +148,53 @@ func (l *Loader) LoadDefaults() {
 
 // LoadFromFile loads configuration from YAML file
 func (l *Loader) LoadFromFile() error {
-	// Config file is already set up in root.go
-	// This method handles the actual reading
+	fileViper := viper.New()
+	fileViper.SetConfigType("yaml")
+	fileViper.SetConfigName("config")
 
-	if err := l.viper.ReadInConfig(); err != nil {
-		// Only return error if config file was explicitly specified
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			log.Debug("No config file found, using defaults and environment variables")
-			return nil
+	home, err := os.UserHomeDir()
+	if err == nil {
+		fileViper.AddConfigPath(filepath.Join(home, ".config", "ds"))
+	}
+	fileViper.AddConfigPath(".")
+
+	loadedAny := false
+
+	if err := fileViper.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			return err
 		}
-		return err
+	} else {
+		loadedAny = true
+		log.Debug("Loaded base config file", "file", fileViper.ConfigFileUsed())
 	}
 
-	log.Debug("Loaded config", "file", l.viper.ConfigFileUsed())
+	if override := getExplicitConfigFile(); override != "" {
+		fileViper.SetConfigFile(override)
+		if err := fileViper.MergeInConfig(); err != nil {
+			return fmt.Errorf("failed to load config file %s: %w", override, err)
+		}
+		loadedAny = true
+		log.Debug("Merged override config file", "file", override)
+	}
+
+	if !loadedAny {
+		log.Debug("No config file found, using defaults and environment variables")
+		return nil
+	}
+
+	if err := l.viper.MergeConfigMap(fileViper.AllSettings()); err != nil {
+		return fmt.Errorf("failed to apply configuration settings: %w", err)
+	}
+
 	return nil
+}
+
+func (l *Loader) ensureEnvBindings() {
+	replacer := strings.NewReplacer(".", "_")
+	l.viper.SetEnvPrefix("DS")
+	l.viper.SetEnvKeyReplacer(replacer)
+	l.viper.AutomaticEnv()
 }
 
 // LoadFromEnv loads configuration from environment variables
@@ -429,35 +480,100 @@ func (l *Loader) Validate(config *types.Config) error {
 }
 
 // parseSize parses a size string (e.g., "10GB", "500MB") into bytes
-func parseSize(s string) (int64, error) {
-	s = strings.TrimSpace(strings.ToUpper(s))
+func parseSizeValue(raw interface{}) (int64, error) {
+	switch v := raw.(type) {
+	case nil:
+		return 0, fmt.Errorf("missing value")
+	case int:
+		return int64(v), nil
+	case int32:
+		return int64(v), nil
+	case int64:
+		return v, nil
+	case uint:
+		return int64(v), nil
+	case uint32:
+		return int64(v), nil
+	case uint64:
+		const maxInt64 = 1<<63 - 1
+		if v > maxInt64 {
+			return 0, fmt.Errorf("size exceeds int64 range")
+		}
+		return int64(v), nil
+	case float32:
+		return int64(v), nil
+	case float64:
+		return int64(v), nil
+	case string:
+		return parseSizeString(v)
+	default:
+		// Attempt string conversion for unexpected numeric representations
+		return parseSizeString(fmt.Sprintf("%v", v))
+	}
+}
 
-	// Extract number and unit
-	var value float64
-	var unit string
-	_, err := fmt.Sscanf(s, "%f%s", &value, &unit)
+func parseSizeString(s string) (int64, error) {
+	trimmed := strings.TrimSpace(s)
+	if trimmed == "" {
+		return 0, fmt.Errorf("size string is empty")
+	}
+
+	upper := strings.ToUpper(trimmed)
+
+	// Separate numeric portion from unit by scanning runes
+	idx := 0
+	for idx < len(upper) {
+		ch := upper[idx]
+		if (ch >= '0' && ch <= '9') || ch == '.' || ch == '_' {
+			idx++
+			continue
+		}
+		break
+	}
+
+	numeric := strings.ReplaceAll(strings.TrimSpace(upper[:idx]), "_", "")
+	unit := strings.TrimSpace(upper[idx:])
+
+	if numeric == "" {
+		return 0, fmt.Errorf("invalid size format: %s", s)
+	}
+
+	value, err := strconv.ParseFloat(numeric, 64)
 	if err != nil {
 		return 0, fmt.Errorf("invalid size format: %s", s)
 	}
 
-	// Convert to bytes
-	var multiplier int64
-	switch unit {
-	case "B", "":
-		multiplier = 1
-	case "KB", "K":
-		multiplier = 1024
-	case "MB", "M":
-		multiplier = 1024 * 1024
-	case "GB", "G":
-		multiplier = 1024 * 1024 * 1024
-	case "TB", "T":
-		multiplier = 1024 * 1024 * 1024 * 1024
-	default:
-		return 0, fmt.Errorf("invalid size unit: %s", unit)
+	multiplier, err := sizeUnitMultiplier(unit)
+	if err != nil {
+		return 0, err
 	}
 
 	return int64(value * float64(multiplier)), nil
+}
+
+func sizeUnitMultiplier(unit string) (int64, error) {
+	if unit == "" || unit == "B" {
+		return 1, nil
+	}
+
+	switch unit {
+	case "K", "KB", "KI", "KIB":
+		return 1024, nil
+	case "M", "MB", "MI", "MIB":
+		return 1024 * 1024, nil
+	case "G", "GB", "GI", "GIB":
+		return 1024 * 1024 * 1024, nil
+	case "T", "TB", "TI", "TIB":
+		return 1024 * 1024 * 1024 * 1024, nil
+	case "P", "PB", "PI", "PIB":
+		return 1024 * 1024 * 1024 * 1024 * 1024, nil
+	default:
+		return 0, fmt.Errorf("invalid size unit: %s", unit)
+	}
+}
+
+func parseSize(s string) (int64, error) {
+	return parseSizeString(s)
 }
 
 // parseDuration parses a duration string (e.g., "7d", "24h", "30m") into time.Duration
