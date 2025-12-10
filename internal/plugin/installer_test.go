@@ -97,33 +97,6 @@ func TestParsePluginReference(t *testing.T) {
 	}
 }
 
-func TestVerifyChecksum(t *testing.T) {
-	// Create temp file with known content
-	tmpDir := t.TempDir()
-	testFile := filepath.Join(tmpDir, "test.txt")
-
-	content := []byte("test content")
-	if err := os.WriteFile(testFile, content, 0644); err != nil {
-		t.Fatalf("failed to create test file: %v", err)
-	}
-
-	// Calculate expected checksum
-	// echo -n "test content" | sha256sum
-	expectedChecksum := "6ae8a75555209fd6c44157c0aed8016e763ff435a19cf186f76863140143ff72"
-
-	// Test valid checksum
-	err := verifyChecksum(testFile, expectedChecksum)
-	if err != nil {
-		t.Errorf("expected no error for valid checksum, got: %v", err)
-	}
-
-	// Test invalid checksum
-	err = verifyChecksum(testFile, "invalid_checksum")
-	if err == nil {
-		t.Error("expected error for invalid checksum")
-	}
-}
-
 func TestCopyFile(t *testing.T) {
 	tmpDir := t.TempDir()
 
@@ -163,11 +136,9 @@ func TestRemovePlugin(t *testing.T) {
 	}
 
 	binaryPath := filepath.Join(tmpDir, binaryName)
-	manifestPath := filepath.Join(tmpDir, pluginName+".json")
 
 	// Create files
 	_ = os.WriteFile(binaryPath, []byte("binary"), 0755)
-	_ = os.WriteFile(manifestPath, []byte("manifest"), 0644)
 
 	// Create installer
 	authProvider := registry.NewAuthProvider()
@@ -185,10 +156,6 @@ func TestRemovePlugin(t *testing.T) {
 	if _, err := os.Stat(binaryPath); !os.IsNotExist(err) {
 		t.Error("binary still exists after removal")
 	}
-
-	if _, err := os.Stat(manifestPath); !os.IsNotExist(err) {
-		t.Error("manifest still exists after removal")
-	}
 }
 
 func TestRemovePlugin_NotFound(t *testing.T) {
@@ -203,36 +170,6 @@ func TestRemovePlugin_NotFound(t *testing.T) {
 	err := installer.RemovePlugin(ctx, "nonexistent")
 	if err != nil {
 		t.Errorf("RemovePlugin should not error on non-existent plugin: %v", err)
-	}
-}
-
-func TestLoadPluginManifestFromInstaller(t *testing.T) {
-	tmpDir := t.TempDir()
-	manifestPath := filepath.Join(tmpDir, "plugin.json")
-
-	manifestContent := `{"name":"testplugin","version":"1.0.0","description":"Test plugin"}`
-	if err := os.WriteFile(manifestPath, []byte(manifestContent), 0644); err != nil {
-		t.Fatalf("failed to create manifest: %v", err)
-	}
-
-	manifest, err := loadPluginManifest(manifestPath)
-	if err != nil {
-		t.Fatalf("loadPluginManifest failed: %v", err)
-	}
-
-	if manifest.Name != "testplugin" {
-		t.Errorf("expected name 'testplugin', got '%s'", manifest.Name)
-	}
-
-	if manifest.Version != "1.0.0" {
-		t.Errorf("expected version '1.0.0', got '%s'", manifest.Version)
-	}
-}
-
-func TestLoadPluginManifestFromInstaller_NotFound(t *testing.T) {
-	_, err := loadPluginManifest("/nonexistent/path/plugin.json")
-	if err == nil {
-		t.Error("expected error for non-existent manifest")
 	}
 }
 

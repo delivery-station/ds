@@ -5,21 +5,18 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 
 	"github.com/delivery-station/ds/internal/registry"
 	"github.com/delivery-station/ds/pkg/log"
-	"github.com/delivery-station/ds/pkg/types"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-	"gopkg.in/yaml.v3"
 )
 
 // Installer manages plugin installation from OCI registries
@@ -73,23 +70,6 @@ func (i *Installer) InstallPlugin(ctx context.Context, name, version string) err
 		_ = os.RemoveAll(tmpDir) // Best effort cleanup
 	}()
 
-	// Download plugin manifest
-	manifestPath := filepath.Join(tmpDir, "plugin.json")
-	if err := i.downloadManifest(ctx, ref, manifestPath); err != nil {
-		return fmt.Errorf("failed to download manifest: %w", err)
-	}
-
-	// Parse manifest
-	manifest, err := loadPluginManifest(manifestPath)
-	if err != nil {
-		return fmt.Errorf("failed to parse manifest: %w", err)
-	}
-
-	// Check platform compatibility
-	if !isManifestCompatible(manifest, runtime.GOOS, runtime.GOARCH) {
-		return fmt.Errorf("plugin not compatible with %s/%s", runtime.GOOS, runtime.GOARCH)
-	}
-
 	// Determine binary name and manifest identifier
 	binaryBase := filepath.Base(name)
 	binaryName := binaryBase
@@ -100,14 +80,6 @@ func (i *Installer) InstallPlugin(ctx context.Context, name, version string) err
 	tmpBinary := filepath.Join(tmpDir, binaryName)
 	if err := i.downloadBinary(ctx, ref, tmpBinary, platform); err != nil {
 		return fmt.Errorf("failed to download binary: %w", err)
-	}
-
-	// Verify checksum if provided
-	if manifest.Checksum != "" {
-		if err := verifyChecksum(tmpBinary, manifest.Checksum); err != nil {
-			return fmt.Errorf("checksum verification failed: %w", err)
-		}
-		log.Debug("Checksum verified")
 	}
 
 	// Ensure plugin directory exists
@@ -147,13 +119,12 @@ func (i *Installer) InstallPlugin(ctx context.Context, name, version string) err
 		}
 	}
 
-	// Install manifest with a .json extension to match the OCI index content
-	destManifest := filepath.Join(i.pluginDir, binaryBase+".json")
-	if err := copyFile(manifestPath, destManifest); err != nil {
-		return fmt.Errorf("failed to install manifest: %w", err)
+	installedVersion := version
+	if installedVersion == "" {
+		installedVersion = "latest"
 	}
 
-	log.Info("Successfully installed plugin", "name", name, "version", manifest.Version)
+	log.Info("Successfully installed plugin", "name", name, "version", installedVersion)
 	return nil
 }
 
@@ -161,12 +132,12 @@ func (i *Installer) InstallPlugin(ctx context.Context, name, version string) err
 func (i *Installer) UpdatePlugin(ctx context.Context, name string) error {
 	log.Info("Updating plugin", "name", name)
 
-	// Check current version
-	manifestName := filepath.Base(name) + ".json"
-	jsonManifest := filepath.Join(i.pluginDir, manifestName)
-	var currentVersion string
-	if manifest, err := loadPluginManifest(jsonManifest); err == nil {
-		currentVersion = manifest.Version
+	// Check current version via installed binary
+	currentVersion, err := i.getInstalledPluginVersion(name)
+	if err != nil && !os.IsNotExist(err) {
+		log.Debug("Failed to determine current version", "name", name, "error", err)
+	}
+	if currentVersion != "" {
 		log.Debug("Current version", "version", currentVersion)
 	}
 
@@ -187,7 +158,7 @@ func (i *Installer) UpdatePlugin(ctx context.Context, name string) error {
 	}
 
 	// Check if already at latest
-	if currentVersion == latestVersion {
+	if currentVersion != "" && currentVersion == latestVersion {
 		log.Info("Plugin is already at latest version", "name", name, "version", currentVersion)
 		return nil
 	}
@@ -243,36 +214,6 @@ func (i *Installer) GetAvailableVersions(ctx context.Context, name string) ([]st
 // ResolvePlatform returns the current platform string (os/arch)
 func ResolvePlatform() string {
 	return fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)
-}
-
-// downloadManifest downloads the plugin manifest from the registry
-func (i *Installer) downloadManifest(ctx context.Context, ref, destPath string) error {
-	log.Debug("Downloading manifest", "reference", ref)
-
-	// Create destination file
-	file, err := os.Create(destPath)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			log.Warn("Failed to close manifest file", "error", err)
-		}
-	}()
-
-	// Download manifest artifact
-	manifestRef := fmt.Sprintf("%s-manifest", ref)
-	if err := i.client.Pull(ctx, manifestRef, file); err != nil {
-		// If manifest artifact doesn't exist, try fetching from main artifact
-		_, _ = file.Seek(0, 0) // Reset file position
-		_ = file.Truncate(0)   // Truncate file
-
-		if err := i.client.Pull(ctx, ref, file); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 // downloadBinary downloads the plugin binary from the registry
@@ -518,31 +459,6 @@ func (i *Installer) downloadSignature(ctx context.Context, ref, destPath, platfo
 	return nil
 }
 
-// verifyChecksum verifies the SHA256 checksum of a file
-func verifyChecksum(path, expectedChecksum string) error {
-	file, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			log.Warn("Failed to close file for checksum verification", "error", err)
-		}
-	}()
-
-	hash := sha256.New()
-	if _, err := io.Copy(hash, file); err != nil {
-		return err
-	}
-
-	actualChecksum := hex.EncodeToString(hash.Sum(nil))
-	if actualChecksum != expectedChecksum {
-		return fmt.Errorf("checksum mismatch: expected %s, got %s", expectedChecksum, actualChecksum)
-	}
-
-	return nil
-}
-
 // copyFile copies a file from src to dst
 func copyFile(src, dst string) error {
 	sourceFile, err := os.Open(src)
@@ -585,51 +501,26 @@ func (i *Installer) backupPlugin(name string) error {
 	return copyFile(srcPath, backupPath)
 }
 
-// loadPluginManifest loads and parses a plugin manifest file
-func loadPluginManifest(path string) (*types.PluginManifest, error) {
-	data, err := os.ReadFile(path)
+func (i *Installer) getInstalledPluginVersion(name string) (string, error) {
+	binaryName := name
+	if runtime.GOOS == "windows" {
+		binaryName += ".exe"
+	}
+
+	binaryPath := filepath.Join(i.pluginDir, binaryName)
+	if _, err := os.Stat(binaryPath); err != nil {
+		return "", err
+	}
+
+	output, err := exec.Command(binaryPath, "--version").CombinedOutput()
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
-	var manifest types.PluginManifest
-	if err := yaml.Unmarshal(data, &manifest); err != nil {
-		return nil, err
+	version := strings.TrimSpace(string(output))
+	if idx := strings.Index(version, "\n"); idx >= 0 {
+		version = version[:idx]
 	}
 
-	return &manifest, nil
-}
-
-// isManifestCompatible checks if a manifest is compatible with the given platform
-func isManifestCompatible(manifest *types.PluginManifest, goos, goarch string) bool {
-	// If no platform info, assume compatible
-	if len(manifest.Platform.OS) == 0 {
-		return true
-	}
-
-	// Check OS compatibility
-	osCompatible := false
-	for _, os := range manifest.Platform.OS {
-		if os == goos || os == "all" {
-			osCompatible = true
-			break
-		}
-	}
-
-	if !osCompatible {
-		return false
-	}
-
-	// Check architecture compatibility
-	if len(manifest.Platform.Arch) == 0 {
-		return true // No arch restriction
-	}
-
-	for _, arch := range manifest.Platform.Arch {
-		if arch == goarch || arch == "all" {
-			return true
-		}
-	}
-
-	return false
+	return version, nil
 }

@@ -20,6 +20,80 @@ func TestNewManager(t *testing.T) {
 	}
 }
 
+func TestIsCompatiblePlatform(t *testing.T) {
+	mgr := NewManager(t.TempDir())
+
+	tests := []struct {
+		name       string
+		plugin     *types.PluginInfo
+		compatible bool
+	}{
+		{
+			name: "no manifest",
+			plugin: &types.PluginInfo{
+				Name:     "test",
+				Manifest: nil,
+			},
+			compatible: true,
+		},
+		{
+			name: "no platform info",
+			plugin: &types.PluginInfo{
+				Name:     "test",
+				Manifest: &types.PluginManifest{},
+			},
+			compatible: true,
+		},
+		{
+			name: "compatible platform",
+			plugin: &types.PluginInfo{
+				Name: "test",
+				Manifest: &types.PluginManifest{
+					Platform: types.PluginPlatform{
+						OS:   []string{runtime.GOOS},
+						Arch: []string{runtime.GOARCH},
+					},
+				},
+			},
+			compatible: true,
+		},
+		{
+			name: "incompatible OS",
+			plugin: &types.PluginInfo{
+				Name: "test",
+				Manifest: &types.PluginManifest{
+					Platform: types.PluginPlatform{
+						OS: []string{"invalid-os"},
+					},
+				},
+			},
+			compatible: false,
+		},
+		{
+			name: "compatible OS, incompatible arch",
+			plugin: &types.PluginInfo{
+				Name: "test",
+				Manifest: &types.PluginManifest{
+					Platform: types.PluginPlatform{
+						OS:   []string{runtime.GOOS},
+						Arch: []string{"invalid-arch"},
+					},
+				},
+			},
+			compatible: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := mgr.isCompatiblePlatform(tt.plugin)
+			if result != tt.compatible {
+				t.Errorf("expected compatible=%v, got %v", tt.compatible, result)
+			}
+		})
+	}
+}
+
 func TestDiscoverPlugins_EmptyDirectory(t *testing.T) {
 	// Create temporary plugin directory
 	tmpDir := t.TempDir()
@@ -73,13 +147,6 @@ func TestDiscoverPlugins_WithMockPlugin(t *testing.T) {
 		t.Fatalf("failed to create mock plugin: %v", err)
 	}
 
-	// Create plugin manifest
-	manifestPath := filepath.Join(tmpDir, "ds-testplugin.json")
-	manifestContent := `{"name":"testplugin","version":"1.0.0","description":"Test plugin for unit tests","commands":[{"name":"test","description":"Test command"}],"platform":{"os":["linux","darwin","windows"],"arch":["amd64","arm64"]}}`
-	if err := os.WriteFile(manifestPath, []byte(manifestContent), 0644); err != nil {
-		t.Fatalf("failed to create manifest: %v", err)
-	}
-
 	// Discover plugins
 	mgr := NewManager(tmpDir)
 	err := mgr.DiscoverPlugins()
@@ -104,10 +171,6 @@ func TestDiscoverPlugins_WithMockPlugin(t *testing.T) {
 	// Version comes from --version output which includes prefix
 	if !strings.Contains(plugin.Version, "1.0.0") {
 		t.Errorf("expected version to contain '1.0.0', got '%s'", plugin.Version)
-	}
-
-	if plugin.Description != "Test plugin for unit tests" {
-		t.Errorf("expected description 'Test plugin for unit tests', got '%s'", plugin.Description)
 	}
 }
 
@@ -183,94 +246,6 @@ func TestValidatePlugin(t *testing.T) {
 	}
 }
 
-func TestIsCompatiblePlatform(t *testing.T) {
-	mgr := NewManager("/tmp")
-
-	tests := []struct {
-		name       string
-		plugin     *types.PluginInfo
-		compatible bool
-	}{
-		{
-			name: "no manifest - always compatible",
-			plugin: &types.PluginInfo{
-				Name: "test",
-			},
-			compatible: true,
-		},
-		{
-			name: "empty platform - always compatible",
-			plugin: &types.PluginInfo{
-				Name: "test",
-				Manifest: &types.PluginManifest{
-					Platform: types.PluginPlatform{},
-				},
-			},
-			compatible: true,
-		},
-		{
-			name: "matching OS and arch",
-			plugin: &types.PluginInfo{
-				Name: "test",
-				Manifest: &types.PluginManifest{
-					Platform: types.PluginPlatform{
-						OS:   []string{runtime.GOOS},
-						Arch: []string{runtime.GOARCH},
-					},
-				},
-			},
-			compatible: true,
-		},
-		{
-			name: "all platforms",
-			plugin: &types.PluginInfo{
-				Name: "test",
-				Manifest: &types.PluginManifest{
-					Platform: types.PluginPlatform{
-						OS:   []string{"all"},
-						Arch: []string{"all"},
-					},
-				},
-			},
-			compatible: true,
-		},
-		{
-			name: "incompatible OS",
-			plugin: &types.PluginInfo{
-				Name: "test",
-				Manifest: &types.PluginManifest{
-					Platform: types.PluginPlatform{
-						OS: []string{"invalid-os"},
-					},
-				},
-			},
-			compatible: false,
-		},
-		{
-			name: "compatible OS, incompatible arch",
-			plugin: &types.PluginInfo{
-				Name: "test",
-				Manifest: &types.PluginManifest{
-					Platform: types.PluginPlatform{
-						OS:   []string{runtime.GOOS},
-						Arch: []string{"invalid-arch"},
-					},
-				},
-			},
-			compatible: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := mgr.isCompatiblePlatform(tt.plugin)
-			if result != tt.compatible {
-				t.Errorf("expected compatible=%v, got %v", tt.compatible, result)
-			}
-		})
-	}
-}
-
 func TestPluginCaching(t *testing.T) {
 	tmpDir := t.TempDir()
 	mgr := NewManager(tmpDir)
@@ -323,63 +298,5 @@ func TestPluginCaching(t *testing.T) {
 	plugins3, _ := mgr.ListPlugins()
 	if len(plugins3) != 2 {
 		t.Errorf("expected 2 plugins after cache invalidation, got %d", len(plugins3))
-	}
-}
-
-func TestLoadPluginManifest(t *testing.T) {
-	tmpDir := t.TempDir()
-	mgr := NewManager(tmpDir)
-
-	// Create plugin binary
-	pluginPath := filepath.Join(tmpDir, "ds-manifesttest")
-	if runtime.GOOS == "windows" {
-		pluginPath += ".exe"
-	}
-	content := "#!/bin/sh\necho 'test'\n"
-	if err := os.WriteFile(pluginPath, []byte(content), 0755); err != nil {
-		t.Fatalf("failed to create plugin: %v", err)
-	}
-
-	// Test: no manifest
-	_, err := mgr.loadPluginManifest(pluginPath)
-	if err == nil {
-		t.Error("expected error when no manifest exists")
-	}
-
-	// Create manifest
-	manifestPath := filepath.Join(tmpDir, "ds-manifesttest.json")
-	manifestContent := `{"name":"manifesttest","version":"2.0.0","description":"Manifest test plugin","commands":[{"name":"cmd1","description":"Command 1"},{"name":"cmd2","description":"Command 2"}],"platform":{"os":["linux","darwin"],"arch":["amd64"]},"annotations":{"finalizer":"cleanup"}}`
-	if err := os.WriteFile(manifestPath, []byte(manifestContent), 0644); err != nil {
-		t.Fatalf("failed to create manifest: %v", err)
-	}
-
-	// Load manifest
-	manifest, err := mgr.loadPluginManifest(pluginPath)
-	if err != nil {
-		t.Fatalf("loadPluginManifest failed: %v", err)
-	}
-
-	if manifest.Name != "manifesttest" {
-		t.Errorf("expected name 'manifesttest', got '%s'", manifest.Name)
-	}
-
-	if manifest.Version != "2.0.0" {
-		t.Errorf("expected version '2.0.0', got '%s'", manifest.Version)
-	}
-
-	if len(manifest.Commands) != 2 {
-		t.Errorf("expected 2 commands, got %d", len(manifest.Commands))
-	}
-
-	if len(manifest.Platform.OS) != 2 {
-		t.Errorf("expected 2 OS entries, got %d", len(manifest.Platform.OS))
-	}
-
-	if len(manifest.Platform.Arch) != 1 {
-		t.Errorf("expected 1 Arch entry, got %d", len(manifest.Platform.Arch))
-	}
-
-	if manifest.Annotations["finalizer"] != "cleanup" {
-		t.Errorf("expected annotation finalizer to be 'cleanup', got '%s'", manifest.Annotations["finalizer"])
 	}
 }
