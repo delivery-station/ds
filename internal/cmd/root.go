@@ -100,22 +100,64 @@ func parsePluginInvocation(args []string) (string, string, []string, error) {
 	// Route parse diagnostics through the same channel Cobra uses for flag errors.
 	flagSet.SetOutput(os.Stderr)
 
-	if err := flagSet.Parse(args); err != nil {
-		return "", "", nil, err
+	// Parse to populate persistent flags (e.g. --config) but preserve plugin flags.
+	// pflag drops unknown flags when UnknownFlags is allowed, so we rebuild the
+	// plugin argument list manually.
+	_ = flagSet.Parse(args)
+
+	knownFlags := map[string]*pflag.Flag{}
+	flagSet.VisitAll(func(f *pflag.Flag) {
+		knownFlags[f.Name] = f
+		if f.Shorthand != "" {
+			knownFlags[f.Shorthand] = f
+		}
+	})
+
+	var remaining []string
+	skipNext := false
+	for i := 0; i < len(args); i++ {
+		if skipNext {
+			skipNext = false
+			continue
+		}
+
+		token := strings.TrimSpace(args[i])
+		if token == "" {
+			continue
+		}
+		if token == "--" {
+			remaining = append(remaining, args[i:]...)
+			break
+		}
+
+		if !looksLikeFlag(token) {
+			remaining = append(remaining, token)
+			continue
+		}
+
+		name, hasValue := parseFlagToken(token)
+		flag, isKnown := knownFlags[name]
+		if isKnown {
+			if !hasValue && flag.Value.Type() != "bool" && i+1 < len(args) && !looksLikeFlag(args[i+1]) {
+				skipNext = true
+			}
+			continue
+		}
+
+		remaining = append(remaining, token)
 	}
 
-	leftovers := flagSet.Args()
-	if len(leftovers) == 0 {
+	if len(remaining) == 0 {
 		return "", "", nil, nil
 	}
 
-	pluginName := leftovers[0]
-	if len(leftovers) < 2 {
+	pluginName := remaining[0]
+	if len(remaining) < 2 {
 		return pluginName, "", nil, fmt.Errorf("plugin '%s' requires a command", pluginName)
 	}
 
-	normalizedArgs := normalizePluginArgs(leftovers[2:])
-	return pluginName, leftovers[1], normalizedArgs, nil
+	normalizedArgs := normalizePluginArgs(remaining[2:])
+	return pluginName, remaining[1], normalizedArgs, nil
 }
 
 func normalizePluginArgs(args []string) []string {
@@ -245,6 +287,23 @@ func parseShortFlag(token string, args []string, index int) ([]string, int) {
 	}
 
 	return []string{fmt.Sprintf("%s=true", key)}, 0
+}
+
+func parseFlagToken(token string) (name string, hasValue bool) {
+	if !strings.HasPrefix(token, "-") {
+		return "", false
+	}
+
+	trimmed := strings.TrimLeft(token, "-")
+	if trimmed == "" {
+		return "", false
+	}
+
+	if eq := strings.Index(trimmed, "="); eq >= 0 {
+		return sanitizeArgKey(trimmed[:eq]), true
+	}
+
+	return sanitizeArgKey(trimmed), false
 }
 
 func sanitizeArgKey(key string) string {
