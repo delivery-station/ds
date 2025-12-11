@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/delivery-station/ds/internal/homedir"
 	"github.com/delivery-station/ds/pkg/types"
 	"github.com/spf13/viper"
 )
@@ -14,7 +15,7 @@ import (
 func TestLoadDefaults(t *testing.T) {
 	// Create a new viper instance for testing
 	v := viper.New()
-	loader := &Loader{viper: v}
+	loader := &Loader{viper: v, home: staticHomeDir{path: t.TempDir()}}
 
 	loader.LoadDefaults()
 
@@ -48,7 +49,7 @@ func TestLoadDefaults(t *testing.T) {
 }
 
 func TestExpandString(t *testing.T) {
-	loader := NewLoader()
+	loader := NewLoaderWithHome(staticHomeDir{path: t.TempDir()})
 
 	tests := []struct {
 		name     string
@@ -101,7 +102,7 @@ func TestExpandString(t *testing.T) {
 }
 
 func TestExpandStringTilde(t *testing.T) {
-	loader := NewLoader()
+	loader := NewLoaderWithHome(staticHomeDir{path: t.TempDir()})
 
 	// Test that tilde gets expanded or stays as-is
 	result := loader.expandString("~/config/file.yaml")
@@ -114,7 +115,7 @@ func TestExpandStringTilde(t *testing.T) {
 }
 
 func TestValidate(t *testing.T) {
-	loader := NewLoader()
+	loader := NewLoaderWithHome(staticHomeDir{path: t.TempDir()})
 
 	tests := []struct {
 		name    string
@@ -216,12 +217,11 @@ cache:
 	if err := os.MkdirAll(homeDir, 0755); err != nil {
 		t.Fatalf("failed to create fake home: %v", err)
 	}
-	t.Setenv("HOME", homeDir)
 
 	SetExplicitConfigFile(configFile)
 	defer SetExplicitConfigFile("")
 
-	loader := &Loader{viper: viper.New()}
+	loader := &Loader{viper: viper.New(), home: staticHomeDir{path: homeDir}}
 	cfg, err := loader.Load()
 	if err != nil {
 		t.Fatalf("failed to load config: %v", err)
@@ -268,11 +268,10 @@ cache:
 		t.Fatalf("failed to write override config: %v", err)
 	}
 
-	t.Setenv("HOME", homeDir)
 	SetExplicitConfigFile(overridePath)
 	defer SetExplicitConfigFile("")
 
-	loader := &Loader{viper: viper.New()}
+	loader := &Loader{viper: viper.New(), home: staticHomeDir{path: homeDir}}
 	cfg, err := loader.Load()
 	if err != nil {
 		t.Fatalf("failed to load merged config: %v", err)
@@ -341,7 +340,7 @@ cache:
 	SetExplicitConfigFile(configPath)
 	defer SetExplicitConfigFile("")
 
-	loader := &Loader{viper: viper.New()}
+	loader := &Loader{viper: viper.New(), home: staticHomeDir{path: filepath.Join(tmpDir, "home")}}
 	cfg, err := loader.Load()
 	if err != nil {
 		t.Fatalf("failed to load config: %v", err)
@@ -432,7 +431,7 @@ func TestMergeDockerCredentialsDoesNotOverrideExisting(t *testing.T) {
 }
 
 func TestExpandVariables(t *testing.T) {
-	loader := NewLoader()
+	loader := NewLoaderWithHome(staticHomeDir{path: t.TempDir()})
 
 	// Set test environment variables
 	_ = os.Setenv("TEST_USER", "testuser")
@@ -504,3 +503,13 @@ func TestExpandVariables(t *testing.T) {
 		t.Errorf("expected slice value to be expanded, got %v", endpoints[0])
 	}
 }
+
+type staticHomeDir struct {
+	path string
+}
+
+func (s staticHomeDir) HomeDir() (string, error) {
+	return s.path, nil
+}
+
+var _ homedir.Provider = (*staticHomeDir)(nil)

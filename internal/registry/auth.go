@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/delivery-station/ds/internal/homedir"
 	"github.com/delivery-station/ds/pkg/log"
 )
 
@@ -39,11 +40,18 @@ type Credentials struct {
 type AuthProvider struct {
 	dockerConfig *DockerConfig
 	credentials  map[string]*Credentials
+	home         homedir.Provider
 }
 
 // NewAuthProvider creates a new authentication provider
 func NewAuthProvider() *AuthProvider {
+	return NewAuthProviderWithHome(homedir.OSProvider{})
+}
+
+// NewAuthProviderWithHome allows overriding the home directory provider (useful in tests).
+func NewAuthProviderWithHome(home homedir.Provider) *AuthProvider {
 	return &AuthProvider{
+		home:        home,
 		credentials: make(map[string]*Credentials),
 	}
 }
@@ -56,9 +64,12 @@ func (a *AuthProvider) LoadDockerConfig() error {
 // LoadDockerConfigFrom loads Docker credentials from the provided config path.
 // When path is empty, the default ~/.docker/config.json is used.
 func (a *AuthProvider) LoadDockerConfigFrom(path string) error {
-	configPath := resolveDockerConfigPath(path)
+	configPath := a.resolveDockerConfigPath(path)
 	if configPath == "" {
-		configPath = filepath.Join(os.Getenv("HOME"), ".docker", "config.json")
+		home := a.homeDir()
+		if home != "" {
+			configPath = filepath.Join(home, ".docker", "config.json")
+		}
 	}
 
 	data, err := os.ReadFile(configPath)
@@ -162,19 +173,23 @@ func normalizeRegistry(registry string) string {
 	return registry
 }
 
-func resolveDockerConfigPath(path string) string {
+func (a *AuthProvider) resolveDockerConfigPath(path string) string {
 	trimmed := strings.TrimSpace(path)
 	if trimmed == "" {
 		return ""
 	}
 
 	if strings.HasPrefix(trimmed, "~/") {
-		if home, err := os.UserHomeDir(); err == nil {
+		if home := a.homeDir(); home != "" {
 			return filepath.Join(home, trimmed[2:])
 		}
 	}
 
 	return trimmed
+}
+
+func (a *AuthProvider) homeDir() string {
+	return homedir.Resolve(a.home)
 }
 
 func decodeDockerAuth(encoded string) (string, string, error) {

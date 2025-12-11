@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/delivery-station/ds/internal/homedir"
 	"github.com/delivery-station/ds/pkg/log"
 	"github.com/delivery-station/ds/pkg/types"
 	"github.com/spf13/viper"
@@ -22,12 +23,19 @@ import (
 // Loader handles configuration loading from multiple sources
 type Loader struct {
 	viper *viper.Viper
+	home  homedir.Provider
 }
 
 // NewLoader creates a new configuration loader
 func NewLoader() *Loader {
+	return NewLoaderWithHome(homedir.OSProvider{})
+}
+
+// NewLoaderWithHome allows overriding how the home directory is resolved (useful in tests).
+func NewLoaderWithHome(home homedir.Provider) *Loader {
 	return &Loader{
 		viper: viper.GetViper(),
+		home:  home,
 	}
 }
 
@@ -109,7 +117,7 @@ func (l *Loader) Load() (*types.Config, error) {
 
 // LoadDefaults sets sensible default values
 func (l *Loader) LoadDefaults() {
-	home, _ := os.UserHomeDir()
+	home := homedir.Resolve(l.home)
 
 	// Registry defaults
 	l.viper.SetDefault("registry.default", "ghcr.io/delivery-station")
@@ -152,8 +160,8 @@ func (l *Loader) LoadFromFile() error {
 	fileViper.SetConfigType("yaml")
 	fileViper.SetConfigName("config")
 
-	home, err := os.UserHomeDir()
-	if err == nil {
+	home := homedir.Resolve(l.home)
+	if home != "" {
 		fileViper.AddConfigPath(filepath.Join(home, ".config", "ds"))
 	}
 	fileViper.AddConfigPath(".")
@@ -301,7 +309,7 @@ func (l *Loader) expandString(s string) string {
 
 	// Expand tilde for home directory
 	if strings.HasPrefix(s, "~/") {
-		if home, err := os.UserHomeDir(); err == nil {
+		if home := homedir.Resolve(l.home); home != "" {
 			s = filepath.Join(home, s[2:])
 		}
 	}
@@ -596,7 +604,7 @@ func parseDuration(s string) (time.Duration, error) {
 
 // getDefaultPluginDir returns the platform-specific default plugin directory
 func (l *Loader) getDefaultPluginDir() string {
-	home, _ := os.UserHomeDir()
+	home := homedir.Resolve(l.home)
 
 	switch runtime.GOOS {
 	case "windows":
@@ -604,16 +612,22 @@ func (l *Loader) getDefaultPluginDir() string {
 		if appdata := os.Getenv("APPDATA"); appdata != "" {
 			return filepath.Join(appdata, "ds", "plugins")
 		}
-		return filepath.Join(home, "AppData", "Roaming", "ds", "plugins")
+		if home != "" {
+			return filepath.Join(home, "AppData", "Roaming", "ds", "plugins")
+		}
+		return ""
 	default:
 		// Linux/macOS: ~/.config/ds/plugins
+		if home == "" {
+			return ""
+		}
 		return filepath.Join(home, ".config", "ds", "plugins")
 	}
 }
 
 // GetConfigPath returns the platform-specific default config file path
 func GetConfigPath() string {
-	home, _ := os.UserHomeDir()
+	home := homedir.Resolve(homedir.OSProvider{})
 
 	switch runtime.GOOS {
 	case "windows":
@@ -621,9 +635,15 @@ func GetConfigPath() string {
 		if appdata := os.Getenv("APPDATA"); appdata != "" {
 			return filepath.Join(appdata, "ds", "config.yaml")
 		}
-		return filepath.Join(home, "AppData", "Roaming", "ds", "config.yaml")
+		if home != "" {
+			return filepath.Join(home, "AppData", "Roaming", "ds", "config.yaml")
+		}
+		return ""
 	default:
 		// Linux/macOS: ~/.config/ds/config.yaml
+		if home == "" {
+			return ""
+		}
 		return filepath.Join(home, ".config", "ds", "config.yaml")
 	}
 }

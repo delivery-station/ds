@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/delivery-station/ds/internal/homedir"
 )
 
 func TestNewAuthProvider(t *testing.T) {
@@ -46,8 +48,8 @@ func TestLoadDockerConfig(t *testing.T) {
 		t.Fatalf("failed to write config: %v", err)
 	}
 
-	provider := NewAuthProvider()
-	err = provider.LoadDockerConfigFrom(configPath)
+	provider := NewAuthProviderWithHome(staticHomeDir{path: tmpDir})
+	err = provider.LoadDockerConfig()
 	if err != nil {
 		t.Fatalf("LoadDockerConfig failed: %v", err)
 	}
@@ -62,10 +64,8 @@ func TestLoadDockerConfig(t *testing.T) {
 }
 
 func TestLoadDockerConfig_NotFound(t *testing.T) {
-	missingPath := filepath.Join(t.TempDir(), "missing", "config.json")
-
-	provider := NewAuthProvider()
-	err := provider.LoadDockerConfigFrom(missingPath)
+	provider := NewAuthProviderWithHome(staticHomeDir{path: t.TempDir()})
+	err := provider.LoadDockerConfig()
 
 	// Should not error on missing file
 	if err != nil {
@@ -278,3 +278,13 @@ func TestGetCredentials_PrecedenceOrder(t *testing.T) {
 		t.Errorf("expected explicit credential to take precedence, got username '%s'", cred.Username)
 	}
 }
+
+type staticHomeDir struct {
+	path string
+}
+
+func (s staticHomeDir) HomeDir() (string, error) {
+	return s.path, nil
+}
+
+var _ homedir.Provider = (*staticHomeDir)(nil)
