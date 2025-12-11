@@ -43,7 +43,13 @@ func TestClientIntegration(t *testing.T) {
 			AutoInstall: true,
 		},
 		Auth: types.AuthConfig{
-			DockerConfig: filepath.Join(os.Getenv("HOME"), ".docker", "config.json"),
+			DockerConfig: func() string {
+				home, err := os.UserHomeDir()
+				if err != nil {
+					return ""
+				}
+				return filepath.Join(home, ".docker", "config.json")
+			}(),
 		},
 	}
 

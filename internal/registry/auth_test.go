@@ -46,15 +46,8 @@ func TestLoadDockerConfig(t *testing.T) {
 		t.Fatalf("failed to write config: %v", err)
 	}
 
-	// Override HOME for test
-	oldHome := os.Getenv("HOME")
-	_ = os.Setenv("HOME", tmpDir)
-	defer func() {
-		_ = os.Setenv("HOME", oldHome)
-	}()
-
 	provider := NewAuthProvider()
-	err = provider.LoadDockerConfig()
+	err = provider.LoadDockerConfigFrom(configPath)
 	if err != nil {
 		t.Fatalf("LoadDockerConfig failed: %v", err)
 	}
@@ -69,17 +62,10 @@ func TestLoadDockerConfig(t *testing.T) {
 }
 
 func TestLoadDockerConfig_NotFound(t *testing.T) {
-	// Use non-existent directory
-	tmpDir := t.TempDir()
-
-	oldHome := os.Getenv("HOME")
-	_ = os.Setenv("HOME", tmpDir)
-	defer func() {
-		_ = os.Setenv("HOME", oldHome)
-	}()
+	missingPath := filepath.Join(t.TempDir(), "missing", "config.json")
 
 	provider := NewAuthProvider()
-	err := provider.LoadDockerConfig()
+	err := provider.LoadDockerConfigFrom(missingPath)
 
 	// Should not error on missing file
 	if err != nil {
