@@ -425,32 +425,6 @@ func matchesPlatform(desc *ocispec.Descriptor, osName, archName string) bool {
 	return false
 }
 
-// downloadSignature downloads the plugin signature from the registry
-func (i *Installer) downloadSignature(ctx context.Context, ref, destPath, platform string) error {
-	log.Debug("Downloading signature", "reference", ref, "platform", platform)
-
-	// Create destination file
-	file, err := os.Create(destPath)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			log.Warn("Failed to close signature file", "error", err)
-		}
-	}()
-
-	// Construct signature reference (same as binary but with .sig suffix)
-	sigRef := fmt.Sprintf("%s-%s.sig", ref, strings.ReplaceAll(platform, "/", "-"))
-
-	// Download signature
-	if err := i.client.Pull(ctx, sigRef, file); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 // copyFile copies a file from src to dst
 func copyFile(src, dst string) error {
 	sourceFile, err := os.Open(src)

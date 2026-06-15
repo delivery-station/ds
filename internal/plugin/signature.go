@@ -240,24 +240,6 @@ func (v *SignatureVerifier) VerifyArtifact(path string, expectedHash string) err
 	return nil
 }
 
-// handleUnsignedPlugin handles plugins without signatures based on mode
-func (v *SignatureVerifier) handleUnsignedPlugin(binaryPath string) error {
-	pluginName := filepath.Base(binaryPath)
-
-	switch v.config.Mode {
-	case SignatureModeStrict:
-		return fmt.Errorf("plugin %s is not signed (strict mode requires signatures)", pluginName)
-	case SignatureModePermissive:
-		if v.config.AllowUnsigned {
-			v.logger.Warn("⚠️  Plugin is not signed (running in permissive mode)", "plugin", pluginName)
-			return nil
-		}
-		return fmt.Errorf("plugin %s is not signed (allow_unsigned is false)", pluginName)
-	default:
-		return nil
-	}
-}
-
 // loadPublicKey loads a public key from a PEM file
 func (v *SignatureVerifier) loadPublicKey(path string) (*rsa.PublicKey, error) {
 	// Expand path
