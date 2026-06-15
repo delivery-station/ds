@@ -5,15 +5,20 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/pem"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"encoding/base64"
+
+	"github.com/delivery-station/ds/pkg/keys"
 	"github.com/delivery-station/ds/pkg/log"
 	"github.com/delivery-station/ds/pkg/types"
 	"github.com/hashicorp/go-hclog"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 const (
@@ -52,7 +57,19 @@ func NewSignatureVerifier(config *types.SignatureConfig, logger hclog.Logger) (*
 		logger:     logger,
 	}
 
-	// Load public keys from specified paths
+	// 1. Load embedded official keys (Root of Trust)
+	embedded, err := keys.LoadEmbeddedKeys()
+	if err != nil {
+		// This is critical - warning only if strict mode is not enforced?
+		// Actually, if we can't load embedded keys, something is wrong with the binary.
+		// Use logger.Error but proceed as we might have other keys.
+		logger.Error("Failed to load embedded official keys", "error", err)
+	} else {
+		v.publicKeys = append(v.publicKeys, embedded...)
+		logger.Debug("Loaded embedded official keys", "count", len(embedded))
+	}
+
+	// 2. Load public keys from specified paths (Config)
 	for _, keyPath := range config.PublicKeys {
 		key, err := v.loadPublicKey(keyPath)
 		if err != nil {
@@ -60,14 +77,16 @@ func NewSignatureVerifier(config *types.SignatureConfig, logger hclog.Logger) (*
 			continue
 		}
 		v.publicKeys = append(v.publicKeys, key)
-		logger.Debug("Loaded public key", "path", keyPath)
+		logger.Debug("Loaded public key from config", "path", keyPath)
 	}
 
-	// Load public keys from trust store directory
+	// 3. Load public keys from trust store directory (Filesystem)
 	if config.TrustStore != "" {
 		keys, err := v.loadTrustStore(config.TrustStore)
 		if err != nil {
-			logger.Warn("Failed to load trust store", "path", config.TrustStore, "error", err)
+			// If default trust store doesn't exist, it's fine (warn if it was explicitly set?)
+			// Typically we just warn if it fails.
+			logger.Debug("Failed to load trust store (might be empty or missing)", "path", config.TrustStore, "error", err)
 		} else {
 			v.publicKeys = append(v.publicKeys, keys...)
 			logger.Debug("Loaded public keys from trust store", "path", config.TrustStore, "count", len(keys))
@@ -82,58 +101,142 @@ func NewSignatureVerifier(config *types.SignatureConfig, logger hclog.Logger) (*
 	return v, nil
 }
 
-// VerifyPlugin verifies the digital signature of a plugin binary
-func (v *SignatureVerifier) VerifyPlugin(binaryPath string) error {
+// VerifyLayer checks the signature annotations on a layer
+func (v *SignatureVerifier) VerifyLayer(layer ocispec.Descriptor) error {
 	if v.config.Mode == SignatureModeDisabled {
 		return nil
 	}
 
-	// Look for signature file
-	sigPath := binaryPath + ".sig"
-	sigData, err := os.ReadFile(sigPath)
-	if err != nil {
-		// No signature file found
-		if os.IsNotExist(err) {
-			return v.handleUnsignedPlugin(binaryPath)
+	sigEnc := layer.Annotations["delivery-station.io/signature"]
+	keyID := layer.Annotations["delivery-station.io/key.id"]
+
+	if sigEnc == "" {
+		if v.config.Mode == SignatureModeStrict {
+			return fmt.Errorf("missing signature annotations on layer (strict mode)")
 		}
-		return fmt.Errorf("failed to read signature file: %w", err)
+		// Permissive mode with missing signature
+		if v.config.AllowUnsigned {
+			v.logger.Warn("⚠️  Layer has no signature (running in permissive mode)")
+			return nil
+		}
+		return fmt.Errorf("layer is not signed (mode=%s)", v.config.Mode)
 	}
 
-	// Read plugin binary
-	binaryData, err := os.ReadFile(binaryPath)
+	sig, err := base64.StdEncoding.DecodeString(sigEnc)
 	if err != nil {
-		return fmt.Errorf("failed to read plugin binary: %w", err)
+		return fmt.Errorf("failed to decode signature: %w", err)
 	}
 
-	// Compute hash
-	hash := sha256.Sum256(binaryData)
+	// Verify signature against trusted keys
+	// The signature signs the Layer Digest (which is the digest of the content + metadata in OCI,
+	// but here we signed the *content* hash.
+	// Wait, in ds-porter we signed the *binary content*. The digest of the layer IS the digest of the content.
+	// So we verify that the signature corresponds to the digest string.
+	// Actually, usually we sign the hex string or the raw bytes.
+	// In ds-porter step 472: signature, keyID, _, err := p.signContent(contentBytes)
+	// So we signed the CONTENT.
+	// To verify, we need the content or the hash of the content.
+	// We only have the digest here (which is the hash of the content).
+	// We can't verify PKCS1v15 signature of *content* if we only have the *hash* unless we blindly trust the hash.
+	// BUT, RSA SignPKCS1v15 takes the HASH of the message.
+	// rsa.SignPKCS1v15(rand, priv, crypto.SHA256, hashed[:])
+	// So we need the HASH of the content.
+	// The layer.Digest IS the SHA256 hash of the content (usually).
+	// So we can parse layer.Digest to get the hash bytes.
 
-	// Try to verify with each public key
+	// Parse Digest
+	// digest is "sha256:<hex>"
+	parts := strings.Split(layer.Digest.String(), ":")
+	if len(parts) != 2 || parts[0] != "sha256" {
+		return fmt.Errorf("unsupported digest algorithm: %s", layer.Digest.Algorithm())
+	}
+	hashBytes, err := hex.DecodeString(parts[1])
+	if err != nil {
+		return fmt.Errorf("failed to decode digest hex: %w", err)
+	}
+
+	// Verify
 	verified := false
 	var lastErr error
-	for i, pubKey := range v.publicKeys {
-		err := rsa.VerifyPKCS1v15(pubKey, crypto.SHA256, hash[:], sigData)
-		if err == nil {
-			verified = true
-			v.logger.Debug("Plugin verified with public key", "plugin", filepath.Base(binaryPath), "key_index", i+1)
-			break
+
+	// If Key ID is provided, try to find matching key
+	if keyID != "" {
+		v.logger.Debug("Verifying with specific Key ID", "key_id", keyID)
+
+		// Find matching key in trusted keys
+		var matchedKey *rsa.PublicKey
+		for _, pubKey := range v.publicKeys {
+			// Calculate ID for this key
+			pkix, err := x509.MarshalPKIXPublicKey(pubKey)
+			if err != nil {
+				continue
+			}
+			id := fmt.Sprintf("%x", sha256.Sum256(pkix))
+
+			if id == keyID {
+				matchedKey = pubKey
+				break
+			}
 		}
-		lastErr = err
+
+		if matchedKey != nil {
+			err := rsa.VerifyPKCS1v15(matchedKey, crypto.SHA256, hashBytes, sig)
+			if err == nil {
+				verified = true
+				v.logger.Info("Layer signature verified with trusted Key ID", "key_id", keyID)
+			} else {
+				lastErr = err
+				v.logger.Warn("Signature verification failed for matched Key ID", "key_id", keyID, "error", err)
+			}
+		} else {
+			lastErr = fmt.Errorf("key ID %s not found in trusted keys", keyID)
+			v.logger.Warn("Key ID not found in trusted keys", "key_id", keyID)
+		}
+	} else {
+		// Fallback to trying all keys if no ID provided (backward compatibility / resilience)
+		v.logger.Debug("No Key ID in layer annotations, trying all trusted keys")
+		for _, pubKey := range v.publicKeys {
+			err := rsa.VerifyPKCS1v15(pubKey, crypto.SHA256, hashBytes, sig)
+			if err == nil {
+				verified = true
+				break
+			}
+			lastErr = err
+		}
 	}
 
 	if !verified {
-		if len(v.publicKeys) == 0 {
-			return v.handleUnsignedPlugin(binaryPath)
-		}
-		if v.config.Mode == SignatureModeStrict {
-			return fmt.Errorf("signature verification failed: %w", lastErr)
-		}
-		// Permissive mode - warn but allow
-		v.logger.Warn("Plugin has invalid signature, but permissive mode allows it", "plugin", filepath.Base(binaryPath))
+		return fmt.Errorf("signature verification failed: %w", lastErr)
+	}
+
+	v.logger.Info("Layer signature verified successfully")
+	return nil
+}
+
+// VerifyArtifact checks if the artifact's hash matches the expected hash from SHA256SUMS
+func (v *SignatureVerifier) VerifyArtifact(path string, expectedHash string) error {
+	if v.config.Mode == SignatureModeDisabled {
 		return nil
 	}
 
-	v.logger.Info("Plugin signature verified successfully", "plugin", filepath.Base(binaryPath))
+	if expectedHash == "" {
+		// If verification was skipped (permissive/unsigned), we won't have an expected hash
+		// In strict mode, VerifyMetadata would have failed if signatures were missing.
+		// So here we just return if no hash provided.
+		return nil
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("failed to read artifact: %w", err)
+	}
+
+	hash := fmt.Sprintf("%x", sha256.Sum256(data))
+	if hash != expectedHash {
+		return fmt.Errorf("artifact hash mismatch: expected %s, got %s", expectedHash, hash)
+	}
+
+	v.logger.Debug("Artifact hash verified", "hash", hash)
 	return nil
 }
 
@@ -244,50 +347,4 @@ func (v *SignatureVerifier) loadTrustStore(dir string) ([]*rsa.PublicKey, error)
 	}
 
 	return keys, nil
-}
-
-// SignPlugin signs a plugin binary with a private key
-// This is a helper function for plugin developers
-func SignPlugin(binaryPath, privateKeyPath string) error {
-	// Read private key
-	keyData, err := os.ReadFile(privateKeyPath)
-	if err != nil {
-		return fmt.Errorf("failed to read private key: %w", err)
-	}
-
-	// Decode PEM
-	block, _ := pem.Decode(keyData)
-	if block == nil {
-		return fmt.Errorf("failed to decode PEM block")
-	}
-
-	// Parse private key
-	privKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-	if err != nil {
-		return fmt.Errorf("failed to parse private key: %w", err)
-	}
-
-	// Read plugin binary
-	binaryData, err := os.ReadFile(binaryPath)
-	if err != nil {
-		return fmt.Errorf("failed to read plugin binary: %w", err)
-	}
-
-	// Compute hash
-	hash := sha256.Sum256(binaryData)
-
-	// Sign
-	signature, err := rsa.SignPKCS1v15(nil, privKey, crypto.SHA256, hash[:])
-	if err != nil {
-		return fmt.Errorf("failed to sign: %w", err)
-	}
-
-	// Write signature file
-	sigPath := binaryPath + ".sig"
-	if err := os.WriteFile(sigPath, signature, 0644); err != nil {
-		return fmt.Errorf("failed to write signature: %w", err)
-	}
-
-	log.Info("Plugin signed successfully", "path", sigPath)
-	return nil
 }

@@ -4,12 +4,13 @@ import "time"
 
 // Config represents the complete DS configuration
 type Config struct {
-	Registry RegistryConfig `mapstructure:"registry" yaml:"registry"`
-	Auth     AuthConfig     `mapstructure:"auth" yaml:"auth"`
-	Cache    CacheConfig    `mapstructure:"cache" yaml:"cache"`
-	Logging  LoggingConfig  `mapstructure:"logging" yaml:"logging"`
-	Proxy    ProxyConfig    `mapstructure:"proxy" yaml:"proxy"`
-	Plugins  PluginsConfig  `mapstructure:"plugins" yaml:"plugins"`
+	Registry RegistryConfig                    `mapstructure:"registry" yaml:"registry"`
+	Auth     AuthConfig                        `mapstructure:"auth" yaml:"auth"`
+	Cache    CacheConfig                       `mapstructure:"cache" yaml:"cache"`
+	Logging  LoggingConfig                     `mapstructure:"logging" yaml:"logging"`
+	Proxy    ProxyConfig                       `mapstructure:"proxy" yaml:"proxy"`
+	Plugins  PluginsConfig                     `mapstructure:"plugins" yaml:"plugins"`
+	Settings map[string]map[string]interface{} `mapstructure:"settings" yaml:"settings,omitempty"`
 }
 
 // RegistryConfig contains OCI registry settings
@@ -56,11 +57,10 @@ type ProxyConfig struct {
 
 // PluginsConfig contains plugin management settings
 type PluginsConfig struct {
-	Dir         string                            `mapstructure:"dir" yaml:"dir"`
-	AutoInstall bool                              `mapstructure:"auto_install" yaml:"auto_install"`
-	Sources     []PluginSource                    `mapstructure:"sources" yaml:"sources,omitempty"`
-	Signature   SignatureConfig                   `mapstructure:"signature" yaml:"signature,omitempty"`
-	Settings    map[string]map[string]interface{} `mapstructure:"settings" yaml:"settings,omitempty"`
+	Dir         string          `mapstructure:"dir" yaml:"dir"`
+	AutoInstall bool            `mapstructure:"auto_install" yaml:"auto_install"`
+	Sources     []PluginSource  `mapstructure:"sources" yaml:"sources,omitempty"`
+	Signature   SignatureConfig `mapstructure:"signature" yaml:"signature,omitempty"`
 }
 
 // SignatureConfig contains digital signature verification settings

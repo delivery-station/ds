@@ -98,27 +98,6 @@ func (i *Installer) InstallPlugin(ctx context.Context, name, version string) err
 		return fmt.Errorf("failed to set executable permissions: %w", err)
 	}
 
-	// Download and install signature if available
-	sigPath := tmpBinary + ".sig"
-	if err := i.downloadSignature(ctx, ref, sigPath, platform); err != nil {
-		log.Debug("No signature found for plugin", "error", err)
-	} else {
-		destSig := destBinary + ".sig"
-		if err := copyFile(sigPath, destSig); err != nil {
-			log.Warn("Failed to install signature", "error", err)
-		}
-	}
-
-	// Verify signature
-	if i.verifier != nil {
-		if err := i.verifier.VerifyPlugin(destBinary); err != nil {
-			// Clean up on verification failure
-			_ = os.Remove(destBinary)          // Best effort cleanup
-			_ = os.Remove(destBinary + ".sig") // Best effort cleanup
-			return fmt.Errorf("signature verification failed: %w", err)
-		}
-	}
-
 	installedVersion := version
 	if installedVersion == "" {
 		installedVersion = "latest"
@@ -233,23 +212,29 @@ func (i *Installer) downloadBinaryFromManifest(ctx context.Context, ref, destPat
 		return fmt.Errorf("failed to retrieve manifest: %w", err)
 	}
 
+	// Download the binary
+	var downloadErr error
 	switch manifestDesc.MediaType {
 	case ocispec.MediaTypeImageIndex:
-		return i.downloadBinaryFromIndex(ctx, ref, destPath, platform, manifestBytes)
+		downloadErr = i.downloadBinaryFromIndex(ctx, ref, destPath, platform, manifestBytes)
 	case ocispec.MediaTypeImageManifest, "application/vnd.oci.artifact.manifest.v1+json":
-		return i.downloadBinaryFromSingleManifest(ctx, ref, destPath, manifestBytes)
+		downloadErr = i.downloadBinaryFromSingleManifest(ctx, ref, destPath, manifestBytes)
 	case "":
 		// Media type may be empty; attempt to decode as index first, then manifest
 		if err := i.downloadBinaryFromIndex(ctx, ref, destPath, platform, manifestBytes); err == nil {
-			return nil
+			downloadErr = nil
+		} else {
+			downloadErr = i.downloadBinaryFromSingleManifest(ctx, ref, destPath, manifestBytes)
 		}
-		return i.downloadBinaryFromSingleManifest(ctx, ref, destPath, manifestBytes)
 	default:
 		if strings.Contains(manifestDesc.MediaType, "index") {
-			return i.downloadBinaryFromIndex(ctx, ref, destPath, platform, manifestBytes)
+			downloadErr = i.downloadBinaryFromIndex(ctx, ref, destPath, platform, manifestBytes)
+		} else {
+			downloadErr = i.downloadBinaryFromSingleManifest(ctx, ref, destPath, manifestBytes)
 		}
-		return i.downloadBinaryFromSingleManifest(ctx, ref, destPath, manifestBytes)
 	}
+
+	return downloadErr
 }
 
 func (i *Installer) downloadBinaryFromIndex(ctx context.Context, ref, destPath, platform string, data []byte) error {
@@ -292,6 +277,13 @@ func (i *Installer) downloadBinaryFromSingleManifest(ctx context.Context, ref, d
 	}
 
 	layer := manifest.Layers[0]
+
+	// Verify signature
+	if i.verifier != nil {
+		if err := i.verifier.VerifyLayer(layer); err != nil {
+			return fmt.Errorf("layer signature verification failed: %w", err)
+		}
+	}
 	if strings.EqualFold(layer.MediaType, mediaTypePluginArchive) || strings.EqualFold(layer.MediaType, mediaTypeArtifactArchive) {
 		if err := i.downloadArchiveLayer(ctx, ref, layer, destPath); err != nil {
 			return err

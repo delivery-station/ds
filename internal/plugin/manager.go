@@ -160,17 +160,6 @@ func (m *Manager) DiscoverPlugins() error {
 			continue
 		}
 
-		// Verify signature if verifier is configured
-		if m.verifier != nil {
-			if err := m.verifier.VerifyPlugin(pluginPath); err != nil {
-				log.Warn("Plugin failed signature verification", "plugin", pluginName, "error", err)
-				// In strict mode, skip the plugin
-				if m.verifier.config.Mode == SignatureModeStrict {
-					continue
-				}
-			}
-		}
-
 		m.plugins[pluginName] = pluginInfo
 		log.Debug("Discovered plugin", "plugin", pluginName, "version", pluginInfo.Version)
 	}

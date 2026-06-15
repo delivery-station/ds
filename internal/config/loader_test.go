@@ -458,14 +458,14 @@ func TestExpandVariables(t *testing.T) {
 		},
 		Plugins: types.PluginsConfig{
 			Dir: "./plugins",
-			Settings: map[string]map[string]interface{}{
-				"s3": {
-					"bucket": "${TEST_BUCKET}",
-					"credentials": map[string]interface{}{
-						"access_key": "${TEST_USER}",
-					},
-					"endpoints": []interface{}{"${TEST_USER}"},
+		},
+		Settings: map[string]map[string]interface{}{
+			"s3": {
+				"bucket": "${TEST_BUCKET}",
+				"credentials": map[string]interface{}{
+					"access_key": "${TEST_USER}",
 				},
+				"endpoints": []interface{}{"${TEST_USER}"},
 			},
 		},
 	}
@@ -487,7 +487,7 @@ func TestExpandVariables(t *testing.T) {
 		t.Errorf("expected proxy to be expanded, got %s", config.Proxy.HTTPProxy)
 	}
 
-	settings := config.Plugins.Settings["s3"]
+	settings := config.Settings["s3"]
 	if settings == nil {
 		t.Fatalf("expected plugin settings for s3")
 	}

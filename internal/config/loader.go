@@ -142,7 +142,7 @@ func (l *Loader) LoadDefaults() {
 	l.viper.SetDefault("plugins.signature.allow_unsigned", true)
 	l.viper.SetDefault("plugins.signature.public_keys", []string{})
 	l.viper.SetDefault("plugins.signature.trust_store", filepath.Join(home, ".config", "ds", "trust"))
-	l.viper.SetDefault("plugins.settings", map[string]map[string]interface{}{})
+	l.viper.SetDefault("settings", map[string]map[string]interface{}{})
 
 	// Auth defaults
 	l.viper.SetDefault("auth.docker_config", filepath.Join(home, ".docker", "config.json"))
@@ -244,7 +244,7 @@ func (l *Loader) expandVariables(config *types.Config) error {
 	config.Proxy.NoProxy = l.expandString(config.Proxy.NoProxy)
 
 	// Expand plugin settings
-	l.expandPluginSettings(config.Plugins.Settings)
+	l.expandPluginSettings(config.Settings)
 
 	return nil
 }

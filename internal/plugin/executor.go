@@ -112,7 +112,21 @@ func (e *Executor) runPlugin(pluginName string, info *types.PluginInfo, operatio
 
 	ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
 	if e.config != nil {
-		ctx = types.WithHostConfigPayload(ctx, e.config)
+		// Create a filtered copy of the config for the plugin
+		// We only want to provide settings relevant to THIS plugin
+		filteredConfig := *e.config // Shallow copy
+		filteredConfig.Settings = make(map[string]map[string]interface{})
+
+		if pluginConfig, ok := e.config.Settings[pluginName]; ok {
+			filteredConfig.Settings[pluginName] = pluginConfig
+		}
+
+		// Also include "generic" settings if they exist
+		if genericConfig, ok := e.config.Settings["generic"]; ok {
+			filteredConfig.Settings["generic"] = genericConfig
+		}
+
+		ctx = types.WithHostConfigPayload(ctx, &filteredConfig)
 	}
 	defer cancel()
 
